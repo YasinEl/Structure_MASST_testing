@@ -33,7 +33,7 @@ services:
     image: datasetteproject/datasette:0.64.6
     container_name: structure-masst-datasette
     volumes:
-      - ./database/:/app/database:ro
+      - ./database/:/app/database:rw
       - ./run_datasette.sh:/app/run_datasette.sh
     networks:
       - nginx-net
