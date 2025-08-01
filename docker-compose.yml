@@ -1,10 +1,10 @@
 version: '3'
 services:
-  template-streamlit:
+  structure-masst-streamlit:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: template-streamlit
+    container_name: structure-masst-streamlit
     volumes:
       - ./logs:/app/logs:rw
     networks:
@@ -22,9 +22,37 @@ services:
         limits:
           memory: 8000M
     environment:
-      VIRTUAL_HOST: streamlittemplate.wanglab.science
+      VIRTUAL_HOST: structure-masst.gnps2.org
       VIRTUAL_PORT: 5000
-      LETSENCRYPT_HOST: streamlittemplate.wanglab.science
+      LETSENCRYPT_HOST: structure-masst.gnps2.org
+      LETSENCRYPT_EMAIL: mwang87@gmail.com
+
+  structure-masst-datasette:
+    ports:
+      - "5235:5234" # This port selection of the internal port matching the external port of the web server is to get around a datasette bug
+    image: datasetteproject/datasette:0.64.6
+    container_name: structure-masst-datasette
+    volumes:
+      - ./database/:/app/database:ro
+      - ./run_datasette.sh:/app/run_datasette.sh
+    networks:
+      - nginx-net
+      - default
+    restart: always
+    command: /app/run_datasette.sh
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"      # Maximum size of a single log file
+        max-file: "3"        # Maximum number of log files to keep (rotates after 3 files)
+    deploy:
+      resources:
+        limits:
+          memory: 8000M
+    environment:
+      VIRTUAL_HOST: masst-records.gnps2.org
+      VIRTUAL_PORT: 5234
+      LETSENCRYPT_HOST: masst-records.gnps2.org
       LETSENCRYPT_EMAIL: mwang87@gmail.com
 
 networks:
