@@ -1,0 +1,25 @@
+name: StructureMASST_env
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.12   
+  - pandas
+  - biopython
+  - tqdm
+  - streamlit>=1.45  
+  - ete3
+  - requests
+  - matplotlib
+  - upsetplot
+  - pip
+  - pip:
+      - rdkit
+      - wikidata-dl
+      - Pillow
+      - networkx
+      - psycopg2
+      - formula_validation
+      - git+https://github.com/Wang-Bioinformatics-Lab/GNPSDataPackage.git
+      - dash_extensions
