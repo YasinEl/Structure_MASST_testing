@@ -5,7 +5,6 @@ tqdm
 requests
 matplotlib
 upsetplot
-rdkit
 wikidata-dl
 Pillow
 networkx
@@ -13,3 +12,5 @@ psycopg2-binary
 formula_validation
 git+https://github.com/Wang-Bioinformatics-Lab/GNPSDataPackage.git
 dash_extensions
+--extra-index-url https://pypi.anaconda.org/rdkit/simple
+rdkit-pypi
