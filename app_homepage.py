@@ -3,7 +3,10 @@ from streamlit.components.v1 import html
 import pandas as pd
 import importlib.util
 from rdkit import Chem
-from rdkit.Chem import Draw
+from rdkit.Chem import rdDepictor
+from rdkit.Chem.Draw import rdMolDraw2D
+from PIL import Image
+# from rdkit.Chem import Draw
 import base64
 import io
 from bin.workflow_stepwise import retrieveSpectraCandidates, retrieve_raw_data_matches 
@@ -17,14 +20,13 @@ import plotly.express as px
 import plotly.colors as pc
 from urllib.parse import quote_plus
 from rdkit import Chem
-from rdkit.Chem import Draw
 from formula_validation.Formula import Formula
 import requests
 
 # datasette masst_records.sqlite --setting max_returned_rows 1000000 --setting sql_time_limit_ms 60000
 
 # — load config —
-config_path = "/home/yasin/projects/StructureMASST/config.py"
+config_path = "config.py"
 spec = importlib.util.spec_from_file_location("config", config_path)
 config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)
@@ -47,11 +49,6 @@ st.title("StructureMASST")
 if "raw_results" not in st.session_state:
     st.session_state.raw_results = {}
 
-    # if "library_table" not in st.session_state:
-        # print("Loading library table...")
-        # cols_needed = ['spectrum_id', 'Adduct', 'InChIKey_smiles', 'Smiles', 'collision_energy', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership', 'ppmBetweenExpAndThMass', 'Compound_Name', 'Ion_Mode']
-        # st.session_state.library_table = pd.read_csv(config.PATH_TO_ORIGINAL_LIBRARY_FILE, usecols=cols_needed, dtype=str)
-        # st.session_state.library_table['ppmBetweenExpAndThMass'] = pd.to_numeric(st.session_state.library_table['ppmBetweenExpAndThMass'], errors='coerce')
 
     if "redu_table" not in st.session_state:        
         print("Loading ReDU table...")
@@ -94,17 +91,21 @@ with col2:
     uploaded_file = st.file_uploader("Drop CSV file for batch search", type=["csv"])
 
 # — Display molecule if valid SMILES/SMARTS —
-def mol_to_base64_img(mol, size=(300, 300)):
-    img = Draw.MolToImage(mol, size=size)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    img_str = base64.b64encode(buf.getvalue()).decode("utf-8")
-    return f"<img src='data:image/png;base64,{img_str}' style='margin-top:1em;'/>"
+def mol_to_svg_base64(mol, size=(300, 300)):
+    rdDepictor.Compute2DCoords(mol)
+    drawer = rdMolDraw2D.MolDraw2DSVG(*size)
+    drawer.DrawMolecule(mol)
+    drawer.FinishDrawing()
+    svg = drawer.GetDrawingText()
+    svg_base64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
+    return f"<img src='data:image/svg+xml;base64,{svg_base64}' style='margin-top:1em;'/>"
 
+
+# Render molecule if valid
 if smiles_input:
     mol = Chem.MolFromSmiles(smiles_input) or Chem.MolFromSmarts(smiles_input)
     if mol:
-        st.markdown(mol_to_base64_img(mol), unsafe_allow_html=True)
+        st.markdown(mol_to_svg_base64(mol), unsafe_allow_html=True)
     else:
         st.warning("Not a valid SMILES/SMARTS")
 
