@@ -3,10 +3,7 @@ from streamlit.components.v1 import html
 import pandas as pd
 import importlib.util
 from rdkit import Chem
-from rdkit.Chem import rdDepictor
-from rdkit.Chem.Draw import MolDraw2DSVG
 from PIL import Image
-# from rdkit.Chem import Draw
 import base64
 import io
 from bin.workflow_stepwise import retrieveSpectraCandidates, retrieve_raw_data_matches 
@@ -19,7 +16,6 @@ import plotly.graph_objects as go
 import plotly.express as px
 import plotly.colors as pc
 from urllib.parse import quote_plus
-from rdkit import Chem
 from formula_validation.Formula import Formula
 import requests
 
