@@ -91,21 +91,29 @@ with col2:
     uploaded_file = st.file_uploader("Drop CSV file for batch search", type=["csv"])
 
 # — Display molecule if valid SMILES/SMARTS —
-def mol_to_svg_base64(mol, size=(300, 300)):
-    rdDepictor.Compute2DCoords(mol)
-    drawer = MolDraw2DSVG(*size)
-    drawer.DrawMolecule(mol)
-    drawer.FinishDrawing()
-    svg = drawer.GetDrawingText()
-    svg_base64 = base64.b64encode(svg.encode('utf-8')).decode('utf-8')
-    return f"<img src='data:image/svg+xml;base64,{svg_base64}' style='margin-top:1em;'/>"
+try:
+    from rdkit.Chem import Draw
+    def mol_to_base64_img(mol, size=(300, 300)):
+        try:
+            img = Draw.MolToImage(mol, size=size)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            img_str = base64.b64encode(buf.getvalue()).decode("utf-8")
+            return f"<img src='data:image/png;base64,{img_str}' style='margin-top:1em;'/>"
+        except Exception:
+            return f"<p style='color:red;'>Failed to draw molecule image.</p>"
+except ImportError:
+    mol_to_base64_img = None
 
 
-# Render molecule if valid
+# --- render logic ---
 if smiles_input:
     mol = Chem.MolFromSmiles(smiles_input) or Chem.MolFromSmarts(smiles_input)
     if mol:
-        st.markdown(mol_to_svg_base64(mol), unsafe_allow_html=True)
+        if mol_to_base64_img:
+            st.markdown(mol_to_base64_img(mol), unsafe_allow_html=True)
+        else:
+            st.info(f"SMILES: {smiles_input}")
     else:
         st.warning("Not a valid SMILES/SMARTS")
 
