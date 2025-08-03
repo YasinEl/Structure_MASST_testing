@@ -4,7 +4,7 @@ import pandas as pd
 import importlib.util
 from rdkit import Chem
 from rdkit.Chem import rdDepictor
-from rdkit.Chem.Draw import rdMolDraw2D
+from rdkit.Chem.Draw import MolDraw2DSVG
 from PIL import Image
 # from rdkit.Chem import Draw
 import base64
@@ -93,7 +93,7 @@ with col2:
 # — Display molecule if valid SMILES/SMARTS —
 def mol_to_svg_base64(mol, size=(300, 300)):
     rdDepictor.Compute2DCoords(mol)
-    drawer = rdMolDraw2D.MolDraw2DSVG(*size)
+    drawer = MolDraw2DSVG(*size)
     drawer.DrawMolecule(mol)
     drawer.FinishDrawing()
     svg = drawer.GetDrawingText()
