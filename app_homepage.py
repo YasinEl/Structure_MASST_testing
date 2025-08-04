@@ -48,7 +48,6 @@ if "raw_results" not in st.session_state:
 
     if "redu_table" not in st.session_state:        
         print("Loading ReDU table...")
-        # st.session_state.redu_table = pd.read_csv(config.PATH_TO_ORIGINAL_REDU_FILE, sep="\t")
         sql = """
         SELECT * FROM redu_table
         """
@@ -58,7 +57,7 @@ if "raw_results" not in st.session_state:
         params = {
             "sql": sql,
             "_shape": "objects",
-            "_size": 1000,  # page size
+            "_size": 1000,  
         }
 
         all_rows = []
@@ -71,7 +70,7 @@ if "raw_results" not in st.session_state:
             all_rows.extend(data["rows"])
             next_url = data.get("next_url")
             url = f"https://masst-records.gnps2.org{next_url}" if next_url else None
-            params = {}  # only for first call
+            params = {}  
 
         st.session_state.redu_table = pd.DataFrame(all_rows)
 
@@ -199,7 +198,7 @@ if st.button("Check Available Spectra"):
 
 
 # render outer tabs for each structure query
-if "grouped_results" in st.session_state:
+if "grouped_results" in st.session_state and st.session_state["grouped_results"]:
     with st.expander("Available Library Entries", expanded=True):
         st.markdown("### Available Library Entries")
         name_tabs = st.tabs(list(st.session_state.grouped_results.keys()))
@@ -529,7 +528,7 @@ if "grouped_results" in st.session_state:
 
                 # add query spectrum ID and scan ID to redu_df //could potentially move this into get_masst_and_redu_tables
                 redu_df = redu_df.merge(
-                    df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id"]],
+                    df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct']],
                     on="mri_id_int",
                     how="left"
                 )
