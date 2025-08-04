@@ -84,7 +84,6 @@ def get_library_table(
         if mol is None:
             raise ValueError(f"Invalid SMILES: {smiles}")
         prefix = inchi.MolToInchiKey(mol).split('-')[0]
-        print(f"[STEP 1] library_table for prefix='{prefix}'")
 
         fetch = _get_fetcher(sqlite_path, api_endpoint, timeout)
         lib_sql = (
@@ -107,27 +106,53 @@ def get_library_table(
         if 'spectrum_id' in library_df.columns:
             library_df.rename(columns={'spectrum_id': 'query_spectrum_id'}, inplace=True)
 
+        df_final = library_df.copy()
     else:
 
         structure_type = detect_smiles_or_smarts(smiles)
 
         fetch = _get_fetcher(sqlite_path, api_endpoint, timeout)
-        lib_sql = (
-            "SELECT * FROM library_table "
+        lib_sql_minimal = (
+            "SELECT spectrum_id_int, Smiles, InChIKey_smiles FROM library_table "
             "WHERE ppmBetweenExpAndThMass <= 20 "
             "AND msMassAnalyzer NOT IN ('quadrupole', 'ion trap') "
             "AND Smiles IS NOT NULL "
             "AND Smiles != '' "
             "AND Smiles != 'NaN'"
         )
-        library_df = fetch(lib_sql)
-        
-        library_df = fetch_and_match_smiles(library_df, smiles, match_type=searchtype, smiles_name='only',
+        library_df_minimal = fetch(lib_sql_minimal)
+
+        library_df_minimal = fetch_and_match_smiles(library_df_minimal, smiles, match_type=searchtype, smiles_name='only',
                                              smiles_type=structure_type, formula_base='any', element_diff='any',
-                                             max_by_grp=1000, max_overall=3000)
+                                             max_by_grp=None, max_overall=None)
+        
 
+        # If no matches, return early
+        if isinstance(library_df_minimal, list) or library_df_minimal.empty:
+            print("No matching structures found in the library.")
+            df_final = pd.DataFrame()
+            return df_final
+        
+        matched_ids = library_df_minimal['spectrum_id_int'].dropna().astype(int).unique().tolist()
 
-    return library_df
+        lib_sql_template = (
+            "SELECT spectrum_id_int, spectrum_id, Ion_Mode, collision_energy, Adduct, "
+            "msManufacturer, msMassAnalyzer, GNPS_library_membership "
+            "FROM library_table WHERE spectrum_id_int IN ({ids})"
+        )
+
+        df_metadata = _batched_fetch(lib_sql_template, matched_ids, fetch, chunk_size=500)
+
+        # join and return
+        df_final = library_df_minimal.merge(df_metadata, on='spectrum_id_int', how='left')
+
+        df_final[['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']] = df_final[
+            ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']
+        ].fillna('unknown')
+
+        df_final.rename(columns={'spectrum_id': 'query_spectrum_id'}, inplace=True)
+
+    return df_final
 
 
 # ——— Part 2: MASST + ReDU lookup ———

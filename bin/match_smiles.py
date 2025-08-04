@@ -38,7 +38,7 @@ def detect_smiles_or_smarts(s):
     else:
         return "Invalid"
 
-def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='only', smiles_type='unknown', formula_base='any', element_diff='any', max_by_grp = 8, max_overall = 10):
+def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='only', smiles_type='unknown', formula_base='any', element_diff='any', max_by_grp = None, max_overall = None):
 
     
     #make all column names lower case
@@ -114,72 +114,76 @@ def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='o
 
     df_matched = df_matched.copy()
 
-    df_matched[['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']] = df_matched[
-        ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']
-    ].fillna('unknown')
 
-    # Group by the required columns and limit to at most 8 rows per group
-    df_matched['row_num'] = df_matched.groupby(
-        ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership', 'InChIKey_smiles']
-    ).cumcount() + 1
+    if max_by_grp is not None:
 
-    # Keep only the first 8 rows per group
-    df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
+        df_matched[['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']] = df_matched[
+            ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']
+        ].fillna('unknown')
+
+        # Group by the required columns and limit to at most 8 rows per group
+        df_matched['row_num'] = df_matched.groupby(
+            ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership', 'InChIKey_smiles']
+        ).cumcount() + 1
+
+        # Keep only the first 8 rows per group
+        df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
+        
+        if len(df_limited) > max_overall:
+            df_matched['row_num'] = df_matched.groupby(
+                ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'InChIKey_smiles']
+            ).cumcount() + 1
+
+            # Keep only the first 8 rows per group
+            df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
+
+        if len(df_limited) > max_overall:
+            df_matched['row_num'] = df_matched.groupby(
+                ['collision_energy', 'Adduct', 'InChIKey_smiles']
+            ).cumcount() + 1
+
+            # Keep only the first 8 rows per group
+            df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
+
+        if len(df_limited) > max_overall:
+            df_matched['row_num'] = df_matched.groupby(
+                ['Adduct', 'InChIKey_smiles']
+            ).cumcount() + 1
+
+            # Keep only the first 8 rows per group
+            df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
+
+        if len(df_limited) > max_overall:
+            df_matched['row_num'] = df_matched.groupby(
+                ['InChIKey_smiles']
+            ).cumcount() + 1
+
+            # Keep only the first 8 rows per group
+            df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
+
+        if len(df_limited) > max_overall:
+            print(f"Warning: More than {max_overall} matching structures found. Limiting to {max_overall}.")
+
+            df_limited = df_limited.head(max_overall)
+
+        print(f"Found {len(df_limited)} matching structures after limiting by group.")
     
-    if len(df_limited) > max_overall:
-        df_matched['row_num'] = df_matched.groupby(
-            ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'InChIKey_smiles']
-        ).cumcount() + 1
+    else:
+        df_limited = df_matched
 
-        # Keep only the first 8 rows per group
-        df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
-
-    if len(df_limited) > max_overall:
-        df_matched['row_num'] = df_matched.groupby(
-            ['collision_energy', 'Adduct', 'InChIKey_smiles']
-        ).cumcount() + 1
-
-        # Keep only the first 8 rows per group
-        df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
-
-    if len(df_limited) > max_overall:
-        df_matched['row_num'] = df_matched.groupby(
-            ['Adduct', 'InChIKey_smiles']
-        ).cumcount() + 1
-
-        # Keep only the first 8 rows per group
-        df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
-
-    if len(df_limited) > max_overall:
-        df_matched['row_num'] = df_matched.groupby(
-            ['InChIKey_smiles']
-        ).cumcount() + 1
-
-        # Keep only the first 8 rows per group
-        df_limited = df_matched[df_matched['row_num'] <= max_by_grp]
-
-    if len(df_limited) > max_overall:
-        print(f"Warning: More than {max_overall} matching structures found. Limiting to {max_overall}.")
-
-        df_limited = df_limited.head(max_overall)
-
-    print(f"Found {len(df_limited)} matching structures after limiting by group.")
-
-    df_limited = df_limited.copy()
     df_limited.loc[:, 'smiles_name'] = smiles_name
 
-    df_limited = df_limited.copy()
 
     #rename spectrum_id to query_spectrum_id
-    df_limited.rename(columns={'spectrum_id': 'query_spectrum_id'}, inplace=True)
+    
 
     #remove entries where query id does not start on CCMS or MSBNK
-    df_limited = df_limited[df_limited['query_spectrum_id'].str.startswith(('CCMS', 'MSBNK'))]
+    #df_limited = df_limited[df_limited['query_spectrum_id'].str.startswith(('CCMS', 'MSBNK'))]
 
     #reindex
     df_limited.reset_index(drop=True, inplace=True)
 
-    print(f"Returning {len(df_limited)} unique spectrum_ids after limiting to {max_overall}, with {max_by_grp} by group.")
+    print(f"Returning {len(df_limited)} unique spectrum_ids for {smiles_name}.")
 
     # Return the unique spectrum_ids
     return df_limited

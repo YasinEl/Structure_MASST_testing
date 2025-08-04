@@ -428,7 +428,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
             background-color: #f0f8ff;
             border-radius: 4px;
         ">
-        <h4 style="margin:0 0 0.5em;">🔍 <strong>FASSTrecords</strong></h4>
+        <h4 style="margin:0 0 0.5em;">
+            <strong>FASSTrecords</strong>
+        </h4>
         <p style="margin:0; line-height:1.5; font-size:0.95em;">
             This is <strong>very fast</strong>: obtain distributions of thousands of molecules in seconds,<br/>
             with substructure‑enabled search.<br/>
@@ -448,14 +450,13 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
             border-radius: 4px;
         ">
         <h4 style="margin:0 0 0.5em;">
-            ⚡ <strong>FASST</strong>
-            <span title="We recommend searching only <strong>10–50</strong> scans at a time; larger batches may take several minutes depending on current traffic.">ℹ️</span>
+            <strong>FASST</strong>
         </h4>
         <p style="margin:0; line-height:1.5; font-size:0.95em;">
             Can be rather slow—a maximum of <strong>10–50 spectra</strong> per query is recommended.<br/>
             Each search may take a few minutes, depending on traffic.<br/>
             Allows modification searches.<br/>
-            Always up to date with the latest raw data indexed at<br/>
+            Always up to date with the latest raw data indexed at
             <a href="https://fasst.gnps2.org/" target="_blank" style="color:#e76f51;">fasst.gnps2.org</a>.
         </p>
         </div>
