@@ -313,7 +313,6 @@ def retrieveSpectraCandidates(df_library, input_structure, get_conflicts = False
     
 def retrieve_raw_data_matches(
     library_subset: pd.DataFrame,
-    redu_df: pd.DataFrame | None = None,
     analog: bool = False,
     elimination: bool = False,
     addition: bool = False,
@@ -330,7 +329,6 @@ def retrieve_raw_data_matches(
 
     Args:
         library_subset: DataFrame with a 'query_spectrum_id' column.
-        redu_df: Optional DataFrame of ReDU data to merge on 'mri'.
         analog: Whether to run an analog search.
         database: FASST database name.
         precursor_mz_tol: Precursor m/z tolerance.
@@ -343,6 +341,38 @@ def retrieve_raw_data_matches(
         raw_matches: concatenated FASST responses with 'spectrum_id' column.
         redu_enriched: raw_matches merged with redu_df (empty if redu_df is None/empty).
     """
+
+
+    # 0. load redu data
+    print("Loading ReDU table...")
+    sql = """
+    SELECT * FROM redu_table
+    """
+
+    url = "https://masst-records.gnps2.org/masst_records_copy.json"
+
+    params = {
+        "sql": sql,
+        "_shape": "objects",
+        "_size": 1000,  
+    }
+
+    all_rows = []
+    while url:
+        print(f"Fetching: {url}")
+        r = requests.get(url, params=params)
+        r.raise_for_status()
+        data = r.json()
+
+        all_rows.extend(data["rows"])
+        next_url = data.get("next_url")
+        url = f"https://masst-records.gnps2.org{next_url}" if next_url else None
+        params = {}  
+
+    redu_df = pd.DataFrame(all_rows)
+
+
+
     # 1. Run FASST queries and collect non-empty responses
     responses = []
     for spectrum_id in library_subset['query_spectrum_id']:

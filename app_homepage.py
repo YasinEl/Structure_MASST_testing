@@ -40,40 +40,6 @@ st.set_page_config(
 
 st.title("StructureMASST")
 
-
-# Load redu and libraray tables. should get rid of this necessity before sending to ming
-if "raw_results" not in st.session_state:
-    st.session_state.raw_results = {}
-
-
-    if "redu_table" not in st.session_state:        
-        print("Loading ReDU table...")
-        sql = """
-        SELECT * FROM redu_table
-        """
-
-        url = "https://masst-records.gnps2.org/masst_records_copy.json"
-
-        params = {
-            "sql": sql,
-            "_shape": "objects",
-            "_size": 1000,  
-        }
-
-        all_rows = []
-        while url:
-            print(f"Fetching: {url}")
-            r = requests.get(url, params=params)
-            r.raise_for_status()
-            data = r.json()
-
-            all_rows.extend(data["rows"])
-            next_url = data.get("next_url")
-            url = f"https://masst-records.gnps2.org{next_url}" if next_url else None
-            params = {}  
-
-        st.session_state.redu_table = pd.DataFrame(all_rows)
-
 # — SMILES or CSV input —
 col1, col_or, col2 = st.columns([4,2,4])
 with col1:
@@ -567,7 +533,6 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                 # retrieve raw data matches through MASST
                 masst_df, redu_df = retrieve_raw_data_matches(
                     df_for_name,
-                    st.session_state.redu_table,
                     database='metabolomicspanrepo_index_nightly',
                     precursor_mz_tol=float(prec_tol),
                     fragment_mz_tol=float(frag_tol),
