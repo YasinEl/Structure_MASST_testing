@@ -94,9 +94,14 @@ def get_library_table(
         )
         library_df = fetch(lib_sql)
 
-        library_df[['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']] = library_df[
-            ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']
+        if 'collision_energy' in library_df.columns:
+            library_df['collision_energy'] = library_df['collision_energy'].apply(lambda x: str(x) if pd.notna(x) else 'unknown')
+
+        # Only fillna for known string columns
+        library_df[['Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']] = library_df[
+            ['Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']
         ].fillna('unknown')
+
         
         # rename column InChIKey_smiles_firstBlock to inchikey_first_block
         if 'InChIKey_smiles_firstBlock' in library_df.columns:
@@ -146,11 +151,21 @@ def get_library_table(
         # join and return
         df_final = library_df_minimal.merge(df_metadata, on='spectrum_id_int', how='left')
 
+        if 'collision_energy' in df_final.columns:
+            df_final['collision_energy'] = df_final['collision_energy'].apply(lambda x: str(x) if pd.notna(x) else 'unknown')
+
         df_final[['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']] = df_final[
             ['collision_energy', 'Adduct', 'msManufacturer', 'msMassAnalyzer', 'GNPS_library_membership']
         ].fillna('unknown')
 
+
+
         df_final.rename(columns={'spectrum_id': 'query_spectrum_id'}, inplace=True)
+
+
+    for col in ['spectrum_id_int']:
+        if col in df_final.columns:
+            df_final[col] = pd.to_numeric(df_final[col], errors="coerce")
 
     return df_final
 
