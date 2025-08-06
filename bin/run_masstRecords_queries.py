@@ -141,7 +141,7 @@ def get_library_table(
         matched_ids = library_df_minimal['spectrum_id_int'].dropna().astype(int).unique().tolist()
 
         lib_sql_template = (
-            "SELECT spectrum_id_int, spectrum_id, Ion_Mode, collision_energy, Adduct, "
+            "SELECT spectrum_id_int, spectrum_id, Compound_Name, Ion_Mode, collision_energy, Adduct, "
             "msManufacturer, msMassAnalyzer, GNPS_library_membership "
             "FROM library_table WHERE spectrum_id_int IN ({ids})"
         )
