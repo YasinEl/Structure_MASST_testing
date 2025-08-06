@@ -8,11 +8,32 @@ from tqdm import tqdm
 
 
 
+def query_fasst_api_usi(params, host="https://api.fasst.gnps2.org"):
+
+
+    r = requests.get(os.path.join(host, "search"), params=params, timeout=50)
+
+    r.raise_for_status()
+
+    print("MAKE REQUEST", r.json())
+
+    task_id = r.json()["id"]
+    
+    # now we will wait and then get the results
+    while True:
+        time.sleep(1)
+        r = requests.get(os.path.join(host, "search/result/{}".format(task_id)), timeout=50)
+
+        r.raise_for_status()
+
+        return r.json()
+
+
+    return r.json()
 
 
 
-
-def query_fasst_usi(usi, database='metabolomicspanrepo_index_latest', host="https://fasst.gnps2.org",
+def query_fasst_usi(usi, database='metabolomicspanrepo_index_nightly',
                     analog=False, precursor_mz_tol=0.05,
                     fragment_mz_tol=0.05, min_cos=0.7, matching_peaks=6,
                     cache="Yes", modimass=None, elimination=False, addition=False):
@@ -36,7 +57,7 @@ def query_fasst_usi(usi, database='metabolomicspanrepo_index_latest', host="http
         "cosine_threshold": min_cos,
         "cache": cache
     }
-
+    
     try:
         modimass_val = float(modimass)
     except (TypeError, ValueError):
@@ -52,9 +73,7 @@ def query_fasst_usi(usi, database='metabolomicspanrepo_index_latest', host="http
 
     for attempt in range(3):
         try:
-            r = requests.get(os.path.join(host, "search"), params=params, timeout=50)
-            r.raise_for_status()
-            r = r.json()
+            r = query_fasst_api_usi(params, host="https://api.fasst.gnps2.org")
 
             response_list = r['results']
             
