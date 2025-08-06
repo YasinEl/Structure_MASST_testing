@@ -1,0 +1,3 @@
+[submodule "external/GNPSDataPackage"]
+	path = external/GNPSDataPackage
+	url = https://github.com/Wang-Bioinformatics-Lab/GNPSDataPackage.git
