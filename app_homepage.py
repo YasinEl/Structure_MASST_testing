@@ -80,20 +80,25 @@ if smiles_input:
 
 
 # — mode selection UI —
-col_a1, col_b2 = st.columns(2)
+col_a1, col_b2, _ = st.columns([2,1,2])
 with col_a1:
     searchtype_option = st.radio(
         "Find available MS/MS spectra", 
-        ["exact structure match", "substructure match"], 
+        ["exact structure match", "substructure match", "tanimoto similarity"], 
         horizontal=True
     )
+
+if searchtype_option == "tanimoto similarity":
+    with col_b2:
+        st.text_input("Tanimoto threshold", value="0.8", key="tanimoto_threshold")
 
 # Map UI option to backend value
 if searchtype_option == "exact structure match":
     searchtype_option = "exact"
 elif searchtype_option == "substructure match":
     searchtype_option = "substructure"
-
+elif searchtype_option == "tanimoto similarity":
+    searchtype_option = "tanimoto"
 
 
 # — run the search —

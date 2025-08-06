@@ -69,6 +69,7 @@ def _batched_fetch(template_sql: str,
 def get_library_table(
     smiles: str,
     searchtype: str = "exact",
+    tanimoto_threshold: float = 0.8,
     sqlite_path: str | None = None,
     api_endpoint: str = "http://127.0.0.1:8001/masst_records",
     timeout: int = 10
@@ -76,7 +77,7 @@ def get_library_table(
     """
     Given a SMILES, returns the library_table for its InChIKey prefix.
     """
-    if searchtype not in ["exact", "substructure"]:
+    if searchtype not in ["exact", "substructure", "tanimoto"]:
         raise ValueError(f"Invalid search type: {searchtype}. Must be 'exact' or 'substructure'.")
     
     if searchtype == "exact":
@@ -129,7 +130,7 @@ def get_library_table(
 
         library_df_minimal = fetch_and_match_smiles(library_df_minimal, smiles, match_type=searchtype, smiles_name='only',
                                              smiles_type=structure_type, formula_base='any', element_diff='any',
-                                             max_by_grp=None, max_overall=None)
+                                             max_by_grp=None, max_overall=None, tanimoto_threshold=tanimoto_threshold)
         
 
         # If no matches, return early

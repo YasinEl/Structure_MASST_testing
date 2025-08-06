@@ -1,6 +1,6 @@
-from rdkit import Chem
+from rdkit import Chem, DataStructs
 from tqdm import tqdm
-from rdkit.Chem import rdMolDescriptors
+from rdkit.Chem import rdMolDescriptors, rdFingerprintGenerator
 import pandas as pd
 import re
 from formula_validation.Formula import Formula
@@ -38,7 +38,7 @@ def detect_smiles_or_smarts(s):
     else:
         return "Invalid"
 
-def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='only', smiles_type='unknown', formula_base='any', element_diff='any', max_by_grp = None, max_overall = None):
+def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='only', smiles_type='unknown', formula_base='any', element_diff='any', tanimoto_threshold=0.8, max_by_grp = None, max_overall = None):
 
     
     #make all column names lower case
@@ -69,7 +69,7 @@ def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='o
     if match_type == 'exact':
         # Perform exact match based on InChIKey
         df_matched = df[df['inchikey_first_block'] == target_inchi_key]
-    else:
+    elif match_type == 'substructure':
         # Perform substructure matching
         unique_smiles = df.groupby('inchikey_first_block')['Smiles'].first().dropna().reset_index()
         unique_smiles = unique_smiles['Smiles'].dropna().unique()
@@ -103,6 +103,25 @@ def fetch_and_match_smiles(df, target_smiles, match_type='exact', smiles_name='o
                     if not match_is:
                         continue
 
+                matching_smiles.append(smiles)
+
+        df_matched = df[df['Smiles'].isin(matching_smiles)]
+    elif match_type == 'tanimoto':
+        generator = rdFingerprintGenerator.GetMorganGenerator(radius=2, fpSize=2048)
+
+        target_fp = generator.GetFingerprint(target_mol)
+
+        unique_smiles = df.groupby('inchikey_first_block')['Smiles'].first().dropna().reset_index()
+        unique_smiles = unique_smiles['Smiles'].dropna().unique()
+
+        matching_smiles = []
+        for smiles in tqdm(unique_smiles, desc="Tanimoto Matching"):
+            mol = Chem.MolFromSmiles(smiles)
+            if mol is None:
+                continue
+            fp = generator.GetFingerprint(mol)
+            sim = DataStructs.TanimotoSimilarity(target_fp, fp)
+            if sim >= tanimoto_threshold:
                 matching_smiles.append(smiles)
 
         df_matched = df[df['Smiles'].isin(matching_smiles)]
