@@ -305,7 +305,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
 
                 # display each query structures available spectra as table
-                with st.expander("", expanded=True):
+                with st.expander("Molecules by InChIKey", expanded=True):
 
                     # create a tab for each 2d InChIKey
                     ik_tabs = st.tabs(list(st.session_state.grouped_results[name].keys()))
@@ -500,7 +500,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                 # add query spectrum ID and scan ID to redu_df //could potentially move this into get_masst_and_redu_tables
                 redu_df = redu_df.merge(
-                    df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct']],
+                    df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct', 'Compound_Name']],
                     on="mri_id_int",
                     how="left"
                 )

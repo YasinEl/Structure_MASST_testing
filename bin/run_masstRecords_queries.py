@@ -222,7 +222,7 @@ def get_masst_and_redu_tables(
 
     # — add spectrum_id strings —
     print(f"[STEP 3b] merging spectrum_id for {len(sids)} spectrum_id_ints")
-    spec_map = library_df[['spectrum_id_int', 'query_spectrum_id', 'Adduct']].drop_duplicates()
+    spec_map = library_df[['spectrum_id_int', 'query_spectrum_id', 'Adduct', 'Compound_Name']].drop_duplicates()
     masst_df = masst_df.merge(spec_map, on='spectrum_id_int', how='left')
 
     # — ReDU table —

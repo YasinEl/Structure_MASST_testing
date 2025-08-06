@@ -405,11 +405,13 @@ def retrieve_raw_data_matches(
         return raw_matches, pd.DataFrame()
     
     redu_enriched = add_redu(raw_matches, redu_df)
+
+    print(library_subset.columns)
     
     # add Smiles column from library_subset to redu_enriched
     if 'Smiles' in library_subset.columns:
         redu_enriched = redu_enriched.merge(
-            library_subset[['query_spectrum_id', 'Smiles', 'Adduct']],
+            library_subset[['query_spectrum_id', 'Smiles', 'Adduct', 'Compound_Name']],
             left_on='query_spectrum_id',
             right_on='query_spectrum_id',
             how='left'
