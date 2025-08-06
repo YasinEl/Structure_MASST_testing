@@ -505,7 +505,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                 # add query spectrum ID and scan ID to redu_df //could potentially move this into get_masst_and_redu_tables
                 redu_df = redu_df.merge(
-                    df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct', 'Compound_Name']],
+                    df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct', 'Compound_Name', 'inchikey_first_block']],
                     on="mri_id_int",
                     how="left"
                 )

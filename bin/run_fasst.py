@@ -5,31 +5,39 @@ import json
 import time
 import requests
 from tqdm import tqdm
+import sys
+
+HERE = os.path.dirname(__file__)  
+PKG_PATH = os.path.abspath(os.path.join(HERE, '..', 'external', 'GNPSDataPackage'))
+
+if PKG_PATH not in sys.path:
+    sys.path.insert(0, PKG_PATH)
+
+from gnpsdata.fasst import query_fasst_api_usi
 
 
+# def query_fasst_api_usi(params, host="https://api.fasst.gnps2.org"):
 
-def query_fasst_api_usi(params, host="https://api.fasst.gnps2.org"):
 
+#     r = requests.get(os.path.join(host, "search"), params=params, timeout=50)
 
-    r = requests.get(os.path.join(host, "search"), params=params, timeout=50)
+#     r.raise_for_status()
 
-    r.raise_for_status()
+#     print("MAKE REQUEST", r.json())
 
-    print("MAKE REQUEST", r.json())
-
-    task_id = r.json()["id"]
+#     task_id = r.json()["id"]
     
-    # now we will wait and then get the results
-    while True:
-        time.sleep(1)
-        r = requests.get(os.path.join(host, "search/result/{}".format(task_id)), timeout=50)
+#     # now we will wait and then get the results
+#     while True:
+#         time.sleep(1)
+#         r = requests.get(os.path.join(host, "search/result/{}".format(task_id)), timeout=50)
 
-        r.raise_for_status()
+#         r.raise_for_status()
 
-        return r.json()
+#         return r.json()
 
 
-    return r.json()
+#     return r.json()
 
 
 
@@ -73,7 +81,13 @@ def query_fasst_usi(usi, database='metabolomicspanrepo_index_nightly',
 
     for attempt in range(3):
         try:
-            r = query_fasst_api_usi(params, host="https://api.fasst.gnps2.org")
+
+            r = query_fasst_api_usi(params['usi'], params['library'], host="https://api.fasst.gnps2.org",
+                                    analog=analog, precursor_mz_tol=params['pm_tolerance'],
+                                    fragment_mz_tol=params['fragment_tolerance'], min_cos=params['cosine_threshold'],
+                                    cache=params['cache'])
+
+            #r = query_fasst_api_usi(params, host="https://api.fasst.gnps2.org")
 
             response_list = r['results']
             
