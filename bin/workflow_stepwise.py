@@ -317,6 +317,7 @@ def retrieve_raw_data_matches(
     elimination: bool = False,
     addition: bool = False,
     modimass: float | None = None,
+    modification_condition: str = None,
     database: str = 'metabolomicspanrepo_index_nightly',
     precursor_mz_tol: float = 0.05,
     fragment_mz_tol: float = 0.05,
@@ -403,8 +404,8 @@ def retrieve_raw_data_matches(
     # 3. If ReDU data provided, merge and return enriched DataFrame
     if redu_df is None or redu_df.empty:
         return raw_matches, pd.DataFrame()
-    
-    redu_enriched = add_redu(raw_matches, redu_df)
+
+    redu_enriched = add_redu(raw_matches, redu_df, modification_condition=modification_condition)
 
     print(library_subset.columns)
     
@@ -423,7 +424,8 @@ def retrieve_raw_data_matches(
 
 def add_redu(
     raw_matches: pd.DataFrame,
-    redu_df: pd.DataFrame
+    redu_df: pd.DataFrame,
+    modification_condition: str = None
 ) -> pd.DataFrame:
     """
     Enrich raw_matches with ReDU metadata from redu_df via the 'mri' key.
@@ -443,20 +445,28 @@ def add_redu(
 
     # 1. Prepare and sort raw matches
     df = raw_matches.copy()
+    
+    # 2. Extract 'mri' and 'scan_id' from USI if present
+    if "USI" in df.columns:
+        df[["mri", "scan_id"]] = df["USI"].str.split(":scan:", n=1, expand=True)
+
     df = df.sort_values(
         by=["Cosine", "Matching Peaks"], 
         ascending=[False, False]
     )
 
-    # 2. Extract 'mri' and 'scan_id' from USI if present
-    if "USI" in df.columns:
-        df[["mri", "scan_id"]] = df["USI"].str.split(":scan:", n=1, expand=True)
+    if 'Modified' in df.columns:
+        unique_by_columns = ['mri', 'Delta Mass']
+    else:
+        unique_by_columns = ['mri']
 
     # 3. Keep only the top match per 'mri'
     if "mri" in df.columns:
-        df = df.drop_duplicates(subset=["mri"], keep="first")
+        df = df.drop_duplicates(subset=unique_by_columns, keep="first")
     else:
         print("[add_redu] Warning: 'mri' column not found in matches; merging may fail.")
+
+
 
     # 4. Prepare redu_df for merging
     df_redu = redu_df.copy()
@@ -471,6 +481,14 @@ def add_redu(
     redu_cols = [col for col in merged.columns if col.startswith("redu_")]
     if redu_cols:
         merged[redu_cols] = merged[redu_cols].fillna("unknown")
+
+
+    if 'Modified' in merged.columns and modification_condition:
+        if modification_condition == "Raw file":
+            modification_condition = 'mri'
+
+        valid_groups = merged[merged['Modified'] == 'no'][modification_condition].unique()
+        merged = merged[merged[modification_condition].isin(valid_groups)]
 
     return merged
 

@@ -16,40 +16,13 @@ if PKG_PATH not in sys.path:
 from gnpsdata.fasst import query_fasst_api_usi
 
 
-# def query_fasst_api_usi(params, host="https://api.fasst.gnps2.org"):
-
-
-#     r = requests.get(os.path.join(host, "search"), params=params, timeout=50)
-
-#     r.raise_for_status()
-
-#     print("MAKE REQUEST", r.json())
-
-#     task_id = r.json()["id"]
-    
-#     # now we will wait and then get the results
-#     while True:
-#         time.sleep(1)
-#         r = requests.get(os.path.join(host, "search/result/{}".format(task_id)), timeout=50)
-
-#         r.raise_for_status()
-
-#         return r.json()
-
-
-#     return r.json()
-
-
 
 def query_fasst_usi(usi, database='metabolomicspanrepo_index_nightly',
                     analog=False, precursor_mz_tol=0.05,
                     fragment_mz_tol=0.05, min_cos=0.7, matching_peaks=6,
                     cache="Yes", modimass=None, elimination=False, addition=False):
 
-    print(f"Querying FASST with USI: {usi}, Database: {database}, Analog: {analog}, "
-          f"Precursor m/z tolerance: {precursor_mz_tol}, Fragment m/z tolerance: {fragment_mz_tol}, "
-          f"Minimum cosine score: {min_cos}, Matching peaks: {matching_peaks}, Cache: {cache}")
-    
+   
     if usi.startswith("mzspec"):
         usi_full = usi
     else:
@@ -76,18 +49,22 @@ def query_fasst_usi(usi, database='metabolomicspanrepo_index_nightly',
         params['delta_mass_below'] = modimass_val + 1
         params['delta_mass_above'] = modimass_val + 1
     elif analog:
-        params['delta_mass_below'] = 200
-        params['delta_mass_above'] = 200
+        params['delta_mass_below'] = 100
+        params['delta_mass_above'] = 100
 
     for attempt in range(3):
         try:
 
+            print("Query parameters:")
+            for key, val in params.items():
+                print(f"  {key}: {val}")
+
             r = query_fasst_api_usi(params['usi'], params['library'], host="https://api.fasst.gnps2.org",
                                     analog=analog, precursor_mz_tol=params['pm_tolerance'],
                                     fragment_mz_tol=params['fragment_tolerance'], min_cos=params['cosine_threshold'],
+                                    lower_delta=params.get('delta_mass_below', 100),
+                                    upper_delta=params.get('delta_mass_above', 100),
                                     cache=params['cache'])
-
-            #r = query_fasst_api_usi(params, host="https://api.fasst.gnps2.org")
 
             response_list = r['results']
             

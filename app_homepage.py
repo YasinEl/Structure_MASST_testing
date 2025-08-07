@@ -446,20 +446,28 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
         with col6:
             prec_tol = st.text_input("Precursor Tolerance (Da)", value="0.02")
             do_modification_search = st.checkbox("Modification search", value=False)
-            if do_modification_search:
-                do_elimination = st.checkbox("Elimination search", value=True)
-                do_addition = st.checkbox("Addition search", value=True)
+
 
         with col5:
             frag_tol = st.text_input("Fragment Tolerance (Da)", value="0.02")
             if do_modification_search:
-                sub_col1, col_or, sub_col2 = st.columns([2,1,2])
+                col_elim, col_add = st.columns(2)
+                with col_elim:
+                    do_elimination = st.checkbox("Elimination search", value=True)
+                with col_add:
+                    do_addition = st.checkbox("Addition search", value=True)
+                sub_col1, col_or, sub_col2 = st.columns([2,0.5,2])
                 with sub_col1:
-                    modification_formula = st.text_input("Modification formula", placeholder="e.g., O for hydroxylation")
+                    modification_formula = st.text_input("Modification formula", placeholder="O for hydroxylation")
                 with col_or:
                     st.markdown("<div style='text-align:center; margin-top:2.5em;'>or</div>", unsafe_allow_html=True)
                 with sub_col2:
-                    modification_mass = st.text_input("Modification mass (Da)", placeholder="e.g., 15.9949 for O")
+                    modification_mass = st.text_input("Modification mass (Da)", placeholder="15.9949 for O")
+                do_subsetModificationSearch = st.checkbox("Only report modified molecules if <condition>", value=False)
+
+                if do_subsetModificationSearch:
+                    list_of_values = ["Raw file", "ATTRIBUTE_DatasetAccession", "NCBITaxonomy"]
+                    modification_condition = st.selectbox("Unmodified found in same", options=list_of_values)
 
     ctrl1, ctrl2, _ = st.columns([1,1,7])
     with ctrl1:
@@ -546,7 +554,8 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     analog=do_modification_search,
                     modimass=modification_mass,
                     elimination=do_elimination if 'do_elimination' in locals() else False,
-                    addition=do_addition if 'do_addition' in locals() else False
+                    addition=do_addition if 'do_addition' in locals() else False,
+                    modification_condition=modification_condition if 'modification_condition' in locals() else None,
                 )
                 
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
@@ -562,8 +571,11 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
         # print lens of what has been found
         for name, df_pair in raw_results.items():
+            # count unique MRI IDs in the 'redu' dataframe
+            num_unique_mri = df_pair['redu']['mri_id_int'].dropna().nunique()
+
             st.markdown(
-                f"##### Found **{len(df_pair['masst'])}** spectral hits and **{len(df_pair['redu'])}** matching samples with ReDU metadata for **{name}**."
+                f"##### Found **{len(df_pair['masst'])}** spectral hits and **{num_unique_mri}** unique matching samples with ReDU metadata for **{name}**."
             )
 
         has_valid_results = any(
@@ -752,7 +764,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                             # build links for best spectral match and modification site
                             def build_spectraresolver_link(row):
-                                usi1 = quote_plus(f"{row['USI']}:scan:{row['scan_id']}")
+                                usi1 = quote_plus(f"{row['USI']}")
                                 usi2 = quote_plus(row['lib_usi'])
                                 return (
                                     f"http://metabolomics-usi.gnps2.org/dashinterface"
@@ -776,6 +788,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                     "&ppm_tolerance=25&filter_peaks_variable=0.01"
                                 )
                             
+                           
                             df_redu["best_spectral_match"] = df_redu.apply(build_spectraresolver_link, axis=1)
 
                             if 'Modified' in df_redu.columns:
