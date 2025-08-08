@@ -865,7 +865,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                             )
 
                             # in every row add USI + :scan: + scan_id (as str)
-                            df_redu["lib_usi"] = df_redu["lib_usi"] + ":scan:" + df_redu["scan_id"].astype(str)
+                            df_redu["USI"] = df_redu["USI"] + ":scan:" + df_redu["scan_id"].astype(str)
 
                             # build links for best spectral match and modification site
                             def build_spectraresolver_link(row):
