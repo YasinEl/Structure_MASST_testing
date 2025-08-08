@@ -841,7 +841,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                             st.plotly_chart(fig, use_container_width=True)
 
-                            fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
+                            # fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
 
 
                             raw_data_sankey_triggered = True
