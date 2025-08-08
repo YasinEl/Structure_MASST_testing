@@ -20,6 +20,12 @@ from formula_validation.Formula import Formula
 import requests
 import re
 
+try:
+    from rdkit.Chem import Draw
+    _RD_DRAW_AVAILABLE = True
+except ImportError:
+    _RD_DRAW_AVAILABLE = False
+
 # datasette masst_records.sqlite --setting max_returned_rows 1000000 --setting sql_time_limit_ms 60000
 
 # — load config —
@@ -353,38 +359,47 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                 molecule_overview_df = st.session_state.molecule_overview[name]
 
-                @st.cache_data
-                def smiles_to_datauri(smi: str, size=(800, 800)) -> str:
-                    """Render a SMILES to PNG data URI."""
-                    mol = Chem.MolFromSmiles(smi)
-                    if not mol:
-                        return ""
-                    img = Draw.MolToImage(mol, size=size)
-                    buf = io.BytesIO()
-                    img.save(buf, format="PNG")
-                    b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
-                    return f"data:image/png;base64,{b64}"
-                
-                df = molecule_overview_df.copy()
-                df["structure"] = df["Smiles"].apply(smiles_to_datauri)
+                if _RD_DRAW_AVAILABLE:
+                    @st.cache_data
+                    def smiles_to_datauri(smi: str, size=(800, 800)) -> str:
+                        """Render a SMILES to PNG data URI."""
+                        mol = Chem.MolFromSmiles(smi)
+                        if not mol:
+                            return ""
+                        img = Draw.MolToImage(mol, size=size)
+                        buf = io.BytesIO()
+                        img.save(buf, format="PNG")
+                        b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+                        return f"data:image/png;base64,{b64}"
+                    
+                    molecule_overview_df = molecule_overview_df.copy()
+                    molecule_overview_df["structure"] = molecule_overview_df["Smiles"].apply(smiles_to_datauri)
 
-                # display it with clickable links   
-                table_mol = st.dataframe(
-                    df,
-                    hide_index=True,
-                    on_select="rerun",
-                    selection_mode="multi-row",
-                    use_container_width=True,                # controls overall table width
-                    column_config={
-                        "structure": st.column_config.ImageColumn(
-                            "Structure",                     # header label
-                            width=1000                  # 75 px; use "medium" (200 px) or "large" (400 px) as needed
-                        )
-                    },
-                    key=f"{name}_molecule_table",
-                    row_height=300
-                )
-
+                    # display it with clickable links   
+                    table_mol = st.dataframe(
+                        molecule_overview_df,
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="multi-row",
+                        use_container_width=True,                # controls overall table width
+                        column_config={
+                            "structure": st.column_config.ImageColumn(
+                                "Structure",                     # header label
+                                width=1000                  # 75 px; use "medium" (200 px) or "large" (400 px) as needed
+                            )
+                        },
+                        key=f"{name}_molecule_table",
+                        row_height=300
+                    )
+                else:
+                    table_mol = st.dataframe(
+                        molecule_overview_df,
+                        hide_index=True,
+                        on_select="rerun",
+                        selection_mode="multi-row",
+                        use_container_width=True,
+                        key=f"{name}_molecule_table"
+                    )
 
                 # grab list of selected row indices
                 selected = table_mol.selection.rows
