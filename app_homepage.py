@@ -710,7 +710,11 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
         # print lens of what has been found
         for name, df_pair in raw_results.items():
             # count unique MRI IDs in the 'redu' dataframe
-            num_unique_mri = df_pair['redu']['mri_id_int'].dropna().nunique()
+
+            if 'mri_id_int' in df_pair['redu'].columns:
+                num_unique_mri = df_pair['redu']['mri_id_int'].dropna().nunique()
+            else:
+                num_unique_mri = 0
 
             st.markdown(
                 f"##### Found **{len(df_pair['masst'])}** spectral hits and **{num_unique_mri}** unique matching samples with ReDU metadata for **{name}**."

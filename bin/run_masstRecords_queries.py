@@ -246,4 +246,6 @@ def get_masst_and_redu_tables(
 
     redu_df = _batched_fetch(redu_sql_tmpl, mids, fetch, chunk_size)
 
+    print(redu_df.columns)
+
     return masst_df, redu_df
