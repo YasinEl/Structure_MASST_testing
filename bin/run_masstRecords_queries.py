@@ -233,8 +233,9 @@ def get_masst_and_redu_tables(
 
     print(f"[STEP 4] redu_table for {len(mids)} mri_id_ints")
 
-    with sqlite3.connect(sqlite_path) as conn:
-        redu_columns = pd.read_sql("PRAGMA table_info(redu_table);", conn)
+    fetch = _get_fetcher(sqlite_path, api_endpoint, timeout)
+    sql = "SELECT name FROM pragma_table_info('redu_table')"
+    redu_columns = fetch(sql)
     
     redu_columns_list = redu_columns['name'].tolist()
     columns_to_exclude = ['filename', 'TermsofPosition', 'ComorbidityListDOIDIndex', 'SampleCollectionDateandTime', 'ENVOBroadScale', 'ENVOLocalScale', 'ENVOMediumScale', 'qiita_sample_name',
@@ -245,7 +246,5 @@ def get_masst_and_redu_tables(
     redu_sql_tmpl = f"SELECT {', '.join(redu_columns_list)} FROM redu_table WHERE mri_id_int IN ({{ids}})"
 
     redu_df = _batched_fetch(redu_sql_tmpl, mids, fetch, chunk_size)
-
-    print(redu_df.columns)
 
     return masst_df, redu_df
