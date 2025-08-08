@@ -18,6 +18,7 @@ import plotly.colors as pc
 from urllib.parse import quote_plus
 from formula_validation.Formula import Formula
 import requests
+import re
 
 # datasette masst_records.sqlite --setting max_returned_rows 1000000 --setting sql_time_limit_ms 60000
 
@@ -110,6 +111,7 @@ if st.button("Check Available Spectra"):
         "df_library_conflicts",
         "grouped_results",
         "raw_results",
+        "molecule_overview"
     ]:
         st.session_state.pop(key, None)
 
@@ -117,6 +119,7 @@ if st.button("Check Available Spectra"):
     st.session_state.selected_queries = {}
     st.session_state.df_library_conflicts = None
     st.session_state.grouped_results = {}
+    st.session_state.molecule_overview = {}
 
     # organize input structure queries
     smiles_list = []
@@ -137,6 +140,7 @@ if st.button("Check Available Spectra"):
 
     # process each input structure query separately to retrieve spectra
     grouped_results = defaultdict(dict)
+    molecule_overview = defaultdict(dict)
     for smi, name in zip(smiles_list, name_list):
         try:
             df_library_structurematch = get_library_table(
@@ -156,13 +160,46 @@ if st.button("Check Available Spectra"):
         except Exception as e:
             st.error(f"Error for {smi}: {e}")
 
+          
+
         # Setup for library conflicts. this is currently not doing anything
         print(f"Processing {name} with {len(df_library_structurematch)} matches")
+        overview = []
         for ik in df_library_structurematch["inchikey_first_block"].unique():
             sub_struct = df_library_structurematch[df_library_structurematch["inchikey_first_block"] == ik].copy()
             sub_conf   = df_library_conflicts[df_library_conflicts["inchikey_first_block"] == ik].copy()
             grouped_results[name][ik] = {"structure": sub_struct, "conflicts": sub_conf}
             st.session_state.selected_queries[ik] = list(sub_struct["query_spectrum_id"].unique())
+
+
+            # pick most common Compound_Name (tie-break by len≈20 & fewest special chars)
+            names = sub_struct["Compound_Name"].dropna().astype(str)
+            if not names.empty:
+                vc = names.value_counts()
+                top = vc.iloc[0]
+                cands = vc[vc == top].index.tolist()
+                def special_count(s): 
+                    return len(re.findall(r"[^A-Za-z0-9]", s))
+                best_name = min(cands, key=lambda s: (abs(len(s) - 20), special_count(s)))
+            else:
+                best_name = ""
+
+            # grab first SMILES
+            smiles = sub_struct["Smiles"].dropna().astype(str)
+            inchikey_first_block = sub_struct["inchikey_first_block"].dropna().astype(str)
+            first_smi = smiles.iloc[0] if not smiles.empty else ""
+            ikb = inchikey_first_block.iloc[0] if not inchikey_first_block.empty else ""
+
+            overview.append({
+                "Compound_Name": best_name,
+                "inchikey_first_block": ikb,
+                "Smiles": first_smi
+            })
+
+        st.session_state.molecule_overview[name] = pd.DataFrame(overview)
+
+
+
 
     # get results into session state
     st.session_state.grouped_results = grouped_results
@@ -213,7 +250,6 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                 required_cols = ["msMassAnalyzer", "Ion_Mode", "Adduct", "collision_energy"]
                 missing_cols = [col for col in required_cols if col not in df_all.columns]
                 if not missing_cols:
-
 
                     # Fixing levels
                     stages = ["msMassAnalyzer", "Ion_Mode", "Adduct", "collision_energy"]
@@ -307,6 +343,64 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                         )
                     # update layout
                     st.plotly_chart(fig, use_container_width=True)
+
+
+
+                molecule_overview_df = st.session_state.molecule_overview[name]
+                
+                # display it with clickable links 
+                table_mol = st.dataframe(
+                    molecule_overview_df,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="multi-row",
+                    use_container_width=True,
+                    key=f"{name}_molecule_table"
+                )
+
+
+                # grab list of selected row indices
+                selected = table_mol.selection.rows
+
+                # show buttons with actions for selected molecules
+                col1_mol_level, col2_mol_level, _ = st.columns([2, 2, 6])
+                with col1_mol_level:
+                    if st.button("Remove selected molecule(s)", key=f"{name}_mol_remove"):
+                        if selected:
+                            molecule_overview_df = molecule_overview_df.drop(molecule_overview_df.index[selected])
+                            st.session_state.molecule_overview[name] = molecule_overview_df
+                            unique_inchikeys = molecule_overview_df["inchikey_first_block"].unique().tolist()
+                            # also remove from grouped_results from same name
+                            st.session_state.grouped_results[name] = {
+                                ik: data
+                                for ik, data in st.session_state.grouped_results[name].items()
+                                if ik in unique_inchikeys
+                            }
+
+                        else:
+                            st.warning("No rows selected!")
+                        st.rerun()
+
+                with col2_mol_level:
+                    if st.button("Keep only selected molecule(s)", key=f"{name}_mol_keep"):
+                        if selected:
+                            molecule_overview_df = molecule_overview_df.iloc[selected].reset_index(drop=True)
+                            st.session_state.molecule_overview[name] = molecule_overview_df
+                            unique_inchikeys = molecule_overview_df["inchikey_first_block"].unique().tolist()
+                            # also remove from grouped_results from same name
+                            st.session_state.grouped_results[name] = {
+                                ik: data
+                                for ik, data in st.session_state.grouped_results[name].items()
+                                if ik in unique_inchikeys
+                            }
+                        else:
+                            st.warning("No rows selected!")
+                        st.rerun()
+
+                # update the session state with the filtered dataframe
+                st.session_state.molecule_overview[name] = molecule_overview_df
+                
+
 
 
                 # display each query structures available spectra as table
@@ -747,6 +841,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                             st.plotly_chart(fig, use_container_width=True)
 
+                            fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
+
+
                             raw_data_sankey_triggered = True
 
 
@@ -761,6 +858,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                     else x
                                 )
                             )
+
+                            # in every row add USI + :scan: + scan_id (as str)
+                            df_redu["lib_usi"] = df_redu["lib_usi"] + ":scan:" + df_redu["scan_id"].astype(str)
 
                             # build links for best spectral match and modification site
                             def build_spectraresolver_link(row):
