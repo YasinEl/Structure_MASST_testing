@@ -209,269 +209,268 @@ if st.button("Check Available Spectra"):
 if "grouped_results" in st.session_state and st.session_state["grouped_results"]:
 
     name_tabs = st.tabs(list(st.session_state.grouped_results.keys()))
+    
+    with st.expander("Available Library Entries", expanded=True):
+        st.markdown("### Available Library Entries")
+        name_tabs = st.tabs(list(st.session_state.grouped_results.keys()))
+        for name, name_tab in zip(st.session_state.grouped_results.keys(), name_tabs):
+            with name_tab:
 
-    if len(st.session_state.grouped_results) > 0:
-        with st.expander("Available Library Entries", expanded=True):
-            st.markdown("### Available Library Entries")
-            name_tabs = st.tabs(list(st.session_state.grouped_results.keys()))
-            for name, name_tab in zip(st.session_state.grouped_results.keys(), name_tabs):
-                with name_tab:
+                tables = st.session_state.grouped_results[name]
 
-                    tables = st.session_state.grouped_results[name]
+                # number of molecules = number of 2d inchikey keys
+                num_molecules = len(tables)
 
-                    # number of molecules = number of 2d inchikey keys
-                    num_molecules = len(tables)
+                # total number of matches across all "structure" tables
+                total_matches = sum(
+                    tbl["structure"].shape[0]
+                    for tbl in tables.values()
+                )
 
-                    # total number of matches across all "structure" tables
-                    total_matches = sum(
-                        tbl["structure"].shape[0]
-                        for tbl in tables.values()
-                    )
+                # messages on retrieved spectra
+                st.markdown(
+                    f"##### Retrieved **{total_matches}** spectra for **{num_molecules}** molecule(s) ({name}).",
+                )
 
-                    # messages on retrieved spectra
-                    st.markdown(
-                        f"##### Retrieved **{total_matches}** spectra for **{num_molecules}** molecule(s) ({name}).",
-                    )
+                st.markdown(
+                    "<div style='font-size:0.9em;'>"
+                    "Below you see the public MS/MS spectra available for your search. The higher the spectral diversity, the less blind-spots you will have in public metabolomics raw data."
+                    "</div>",
+                    unsafe_allow_html=True
+                )
 
-                    st.markdown(
-                        "<div style='font-size:0.9em;'>"
-                        "Below you see the public MS/MS spectra available for your search. The higher the spectral diversity, the less blind-spots you will have in public metabolomics raw data."
-                        "</div>",
-                        unsafe_allow_html=True
-                    )
+                if total_matches == 0:
+                    st.info("No spectra available for this structure.")
+                    continue
+                # Sankey per query structure
+                ##########
 
+                # concatenate all the 'structure' dfs under this name
+                df_all = pd.concat(
+                    [v["structure"] for v in st.session_state.grouped_results[name].values()],
+                    ignore_index=True
+                )
 
-                    # Sankey per query structure
-                    ##########
+                # Check if all required columns exist before proceeding
+                required_cols = ["msMassAnalyzer", "Ion_Mode", "Adduct", "collision_energy"]
+                missing_cols = [col for col in required_cols if col not in df_all.columns]
+                if not missing_cols:
 
-                    # concatenate all the 'structure' dfs under this name
-                    df_all = pd.concat(
-                        [v["structure"] for v in st.session_state.grouped_results[name].values()],
-                        ignore_index=True
-                    )
+                    # Fixing levels
+                    stages = ["msMassAnalyzer", "Ion_Mode", "Adduct", "collision_energy"]
+                    df_sankey = df_all[stages].dropna()
 
-                    # Check if all required columns exist before proceeding
-                    required_cols = ["msMassAnalyzer", "Ion_Mode", "Adduct", "collision_energy"]
-                    missing_cols = [col for col in required_cols if col not in df_all.columns]
-                    if not missing_cols:
+                    # Create labels for Sankey diagram
+                    labels = []
+                    for col in stages:
+                        labels += df_sankey[col].unique().tolist()
+                    labels = list(dict.fromkeys(labels))
 
-                        # Fixing levels
-                        stages = ["msMassAnalyzer", "Ion_Mode", "Adduct", "collision_energy"]
-                        df_sankey = df_all[stages].dropna()
+                    # get up to 5 colors (should not be more different instrument types than that)
+                    ms_cats = df_sankey["msMassAnalyzer"].unique().tolist()
+                    palette = px.colors.qualitative.Safe[:5]  
+                    color_map = {cat: palette[i] for i, cat in enumerate(ms_cats)}
 
-                        # Create labels for Sankey diagram
-                        labels = []
-                        for col in stages:
-                            labels += df_sankey[col].unique().tolist()
-                        labels = list(dict.fromkeys(labels))
-
-                        # get up to 5 colors (should not be more different instrument types than that)
-                        ms_cats = df_sankey["msMassAnalyzer"].unique().tolist()
-                        palette = px.colors.qualitative.Safe[:5]  
-                        color_map = {cat: palette[i] for i, cat in enumerate(ms_cats)}
-
-                        # build links
-                        source, target, value, link_colors = [], [], [], []
-                        for i in range(len(stages) - 1):
-                            for cat in ms_cats:
-                                df_cat = df_sankey[df_sankey["msMassAnalyzer"] == cat]
-                                grp = (
-                                    df_cat
-                                    .groupby([stages[i], stages[i + 1]])
-                                    .size()
-                                    .reset_index(name="count")
-                                )
-                                for _, row in grp.iterrows():
-                                    source.append(labels.index(row[stages[i]]))
-                                    target.append(labels.index(row[stages[i + 1]]))
-                                    value.append(row["count"])
-                                    link_colors.append(color_map[cat].replace("rgb", "rgba").replace(")", f", {0.3})"))
-
-
-                        # all nodes light grey with black border
-                        node_colors = ["#F2F2F2"] * len(labels)
-
-                        fig = go.Figure(
-                            go.Sankey(
-                                arrangement="snap",
-                                # ← trace‑level label styling
-                                textfont=dict(family="Arial, sans-serif", size=12, color="black"),
-
-                                node=dict(
-                                    label=labels,
-                                    color=node_colors,
-                                    pad=15,
-                                    thickness=20,
-                                    line=dict(color="black", width=0.5),
-                                ),
-                                link=dict(
-                                    source=source,
-                                    target=target,
-                                    value=value,
-                                    color=link_colors,
-                                ),
+                    # build links
+                    source, target, value, link_colors = [], [], [], []
+                    for i in range(len(stages) - 1):
+                        for cat in ms_cats:
+                            df_cat = df_sankey[df_sankey["msMassAnalyzer"] == cat]
+                            grp = (
+                                df_cat
+                                .groupby([stages[i], stages[i + 1]])
+                                .size()
+                                .reset_index(name="count")
                             )
+                            for _, row in grp.iterrows():
+                                source.append(labels.index(row[stages[i]]))
+                                target.append(labels.index(row[stages[i + 1]]))
+                                value.append(row["count"])
+                                link_colors.append(color_map[cat].replace("rgb", "rgba").replace(")", f", {0.3})"))
+
+
+                    # all nodes light grey with black border
+                    node_colors = ["#F2F2F2"] * len(labels)
+
+                    fig = go.Figure(
+                        go.Sankey(
+                            arrangement="snap",
+                            # ← trace‑level label styling
+                            textfont=dict(family="Arial, sans-serif", size=12, color="black"),
+
+                            node=dict(
+                                label=labels,
+                                color=node_colors,
+                                pad=15,
+                                thickness=20,
+                                line=dict(color="black", width=0.5),
+                            ),
+                            link=dict(
+                                source=source,
+                                target=target,
+                                value=value,
+                                color=link_colors,
+                            ),
                         )
-
-                        # add stage annotations
-                        fig.update_layout(
-                            font=dict(family="Arial, sans-serif", size=12),
-                            margin=dict(l=60, r=60, t=120, b=20),
-                        )
-
-                        # add stage labels above the Sankey diagram
-                        stage_labels = ["Mass Analyzer", "Ion Mode", "Adduct", "Collision Energy"]
-
-                        # calculate x positions for each stage label
-                        n = len(stage_labels) - 1
-                        for i, label in enumerate(stage_labels):
-                            x = i / n
-                            # xanchor depends on position
-                            if i == 0:
-                                xanchor = "left"
-                            elif i == n:
-                                xanchor = "right"
-                            else:
-                                xanchor = "center"
-
-                            # add annotation for each stage label
-                            fig.add_annotation(
-                                x=x,
-                                y=1.02,
-                                xref="paper",
-                                yref="paper",
-                                text=label,
-                                showarrow=False,
-                                font=dict(size=14, color="black"),
-                                xanchor=xanchor
-                            )
-                        # update layout
-                        st.plotly_chart(fig, use_container_width=True)
-
-
-
-                    molecule_overview_df = st.session_state.molecule_overview[name]
-                    
-                    # display it with clickable links 
-                    table_mol = st.dataframe(
-                        molecule_overview_df,
-                        hide_index=True,
-                        on_select="rerun",
-                        selection_mode="multi-row",
-                        use_container_width=True,
-                        key=f"{name}_molecule_table"
                     )
 
+                    # add stage annotations
+                    fig.update_layout(
+                        font=dict(family="Arial, sans-serif", size=12),
+                        margin=dict(l=60, r=60, t=120, b=20),
+                    )
 
-                    # grab list of selected row indices
-                    selected = table_mol.selection.rows
+                    # add stage labels above the Sankey diagram
+                    stage_labels = ["Mass Analyzer", "Ion Mode", "Adduct", "Collision Energy"]
 
-                    # show buttons with actions for selected molecules
-                    col1_mol_level, col2_mol_level, _ = st.columns([2, 2, 6])
-                    with col1_mol_level:
-                        if st.button("Remove selected molecule(s)", key=f"{name}_mol_remove"):
-                            if selected:
-                                molecule_overview_df = molecule_overview_df.drop(molecule_overview_df.index[selected])
-                                st.session_state.molecule_overview[name] = molecule_overview_df
-                                unique_inchikeys = molecule_overview_df["inchikey_first_block"].unique().tolist()
-                                # also remove from grouped_results from same name
-                                st.session_state.grouped_results[name] = {
-                                    ik: data
-                                    for ik, data in st.session_state.grouped_results[name].items()
-                                    if ik in unique_inchikeys
-                                }
+                    # calculate x positions for each stage label
+                    n = len(stage_labels) - 1
+                    for i, label in enumerate(stage_labels):
+                        x = i / n
+                        # xanchor depends on position
+                        if i == 0:
+                            xanchor = "left"
+                        elif i == n:
+                            xanchor = "right"
+                        else:
+                            xanchor = "center"
 
-                            else:
-                                st.warning("No rows selected!")
-                            st.rerun()
-
-                    with col2_mol_level:
-                        if st.button("Keep only selected molecule(s)", key=f"{name}_mol_keep"):
-                            if selected:
-                                molecule_overview_df = molecule_overview_df.iloc[selected].reset_index(drop=True)
-                                st.session_state.molecule_overview[name] = molecule_overview_df
-                                unique_inchikeys = molecule_overview_df["inchikey_first_block"].unique().tolist()
-                                # also remove from grouped_results from same name
-                                st.session_state.grouped_results[name] = {
-                                    ik: data
-                                    for ik, data in st.session_state.grouped_results[name].items()
-                                    if ik in unique_inchikeys
-                                }
-                            else:
-                                st.warning("No rows selected!")
-                            st.rerun()
-
-                    # update the session state with the filtered dataframe
-                    st.session_state.molecule_overview[name] = molecule_overview_df
-                    
+                        # add annotation for each stage label
+                        fig.add_annotation(
+                            x=x,
+                            y=1.02,
+                            xref="paper",
+                            yref="paper",
+                            text=label,
+                            showarrow=False,
+                            font=dict(size=14, color="black"),
+                            xanchor=xanchor
+                        )
+                    # update layout
+                    st.plotly_chart(fig, use_container_width=True)
 
 
 
-                    # display each query structures available spectra as table
-                    with st.expander("Molecules by InChIKey", expanded=True):
+                molecule_overview_df = st.session_state.molecule_overview[name]
+                
+                # display it with clickable links 
+                table_mol = st.dataframe(
+                    molecule_overview_df,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="multi-row",
+                    use_container_width=True,
+                    key=f"{name}_molecule_table"
+                )
 
-                        # create a tab for each 2d InChIKey
-                        ik_tabs = st.tabs(list(st.session_state.grouped_results[name].keys()))
-                        for ik, ik_tab in zip(st.session_state.grouped_results[name].keys(), ik_tabs):
-                            with ik_tab:
 
-                                data = st.session_state.grouped_results[name][ik]
-                                df0 = data["structure"].copy()
+                # grab list of selected row indices
+                selected = table_mol.selection.rows
 
-                                # create spectrum link
-                                df0["spectrum_link"] = (
-                                    "http://metabolomics-usi.gnps2.org/dashinterface?usi1=mzspec%3AGNPS%3AGNPS-LIBRARY%3Aaccession%3A"
-                                    + df0["query_spectrum_id"].astype(str)
-                                    + "&width=10.0&height=6.0&mz_min=None&mz_max=None&max_intensity=125&annotate_precision=4&annotation_rotation=90&cosine=standard&fragment_mz_tolerance=0.02&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D"
-                                )
+                # show buttons with actions for selected molecules
+                col1_mol_level, col2_mol_level, _ = st.columns([2, 2, 6])
+                with col1_mol_level:
+                    if st.button("Remove selected molecule(s)", key=f"{name}_mol_remove"):
+                        if selected:
+                            molecule_overview_df = molecule_overview_df.drop(molecule_overview_df.index[selected])
+                            st.session_state.molecule_overview[name] = molecule_overview_df
+                            unique_inchikeys = molecule_overview_df["inchikey_first_block"].unique().tolist()
+                            # also remove from grouped_results from same name
+                            st.session_state.grouped_results[name] = {
+                                ik: data
+                                for ik, data in st.session_state.grouped_results[name].items()
+                                if ik in unique_inchikeys
+                            }
 
-                                # Make the spectrum column the first column
-                                df0 = df0[["spectrum_link"] + [col for col in df0.columns if col != "spectrum_link"]]
+                        else:
+                            st.warning("No rows selected!")
+                        st.rerun()
 
-                                # display it with clickable links 
-                                table_evt = st.dataframe(
-                                    df0,
-                                    column_config={
-                                        "spectrum_link": st.column_config.LinkColumn(
-                                            label="USI Viewer",
-                                            display_text="Open Spectrum"
-                                        )
-                                    },
-                                    hide_index=True,
-                                    on_select="rerun",
-                                    selection_mode="multi-row",
-                                    use_container_width=True,
-                                    key=f"{name}_{ik}_table"
-                                )
+                with col2_mol_level:
+                    if st.button("Keep only selected molecule(s)", key=f"{name}_mol_keep"):
+                        if selected:
+                            molecule_overview_df = molecule_overview_df.iloc[selected].reset_index(drop=True)
+                            st.session_state.molecule_overview[name] = molecule_overview_df
+                            unique_inchikeys = molecule_overview_df["inchikey_first_block"].unique().tolist()
+                            # also remove from grouped_results from same name
+                            st.session_state.grouped_results[name] = {
+                                ik: data
+                                for ik, data in st.session_state.grouped_results[name].items()
+                                if ik in unique_inchikeys
+                            }
+                        else:
+                            st.warning("No rows selected!")
+                        st.rerun()
 
-                                # grab list of selected row indices
-                                selected = table_evt.selection.rows
+                # update the session state with the filtered dataframe
+                st.session_state.molecule_overview[name] = molecule_overview_df
+                
 
-                                # show buttons with actions for selected spectra
-                                col1, col2, _ = st.columns([2, 2, 6])
-                                with col1:
-                                    if st.button("Remove selected spectra", key=f"{name}_{ik}_remove"):
-                                        if selected:
-                                            df_filtered = df0.drop(df0.index[selected])
-                                            st.session_state.grouped_results[name][ik]["structure"] = df_filtered
-                                        else:
-                                            st.warning("No rows selected!")
-                                        st.rerun()
 
-                                with col2:
-                                    if st.button("Keep only selected spectra", key=f"{name}_{ik}_keep"):
-                                        if selected:
-                                            df_filtered = df0.iloc[selected].reset_index(drop=True)
-                                            st.session_state.grouped_results[name][ik]["structure"] = df_filtered
-                                        else:
-                                            st.warning("No rows selected!")
-                                        st.rerun()
 
-                                # update the session state with the filtered dataframe
-                                st.session_state.grouped_results[name][ik]["structure"] = df0
+                # display each query structures available spectra as table
+                with st.expander("Molecules by InChIKey", expanded=True):
 
-    else:
-        st.info("No spectra are available for this query.")
+                    # create a tab for each 2d InChIKey
+                    ik_tabs = st.tabs(list(st.session_state.grouped_results[name].keys()))
+                    for ik, ik_tab in zip(st.session_state.grouped_results[name].keys(), ik_tabs):
+                        with ik_tab:
+
+                            data = st.session_state.grouped_results[name][ik]
+                            df0 = data["structure"].copy()
+
+                            # create spectrum link
+                            df0["spectrum_link"] = (
+                                "http://metabolomics-usi.gnps2.org/dashinterface?usi1=mzspec%3AGNPS%3AGNPS-LIBRARY%3Aaccession%3A"
+                                + df0["query_spectrum_id"].astype(str)
+                                + "&width=10.0&height=6.0&mz_min=None&mz_max=None&max_intensity=125&annotate_precision=4&annotation_rotation=90&cosine=standard&fragment_mz_tolerance=0.02&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D"
+                            )
+
+                            # Make the spectrum column the first column
+                            df0 = df0[["spectrum_link"] + [col for col in df0.columns if col != "spectrum_link"]]
+
+                            # display it with clickable links 
+                            table_evt = st.dataframe(
+                                df0,
+                                column_config={
+                                    "spectrum_link": st.column_config.LinkColumn(
+                                        label="USI Viewer",
+                                        display_text="Open Spectrum"
+                                    )
+                                },
+                                hide_index=True,
+                                on_select="rerun",
+                                selection_mode="multi-row",
+                                use_container_width=True,
+                                key=f"{name}_{ik}_table"
+                            )
+
+                            # grab list of selected row indices
+                            selected = table_evt.selection.rows
+
+                            # show buttons with actions for selected spectra
+                            col1, col2, _ = st.columns([2, 2, 6])
+                            with col1:
+                                if st.button("Remove selected spectra", key=f"{name}_{ik}_remove"):
+                                    if selected:
+                                        df_filtered = df0.drop(df0.index[selected])
+                                        st.session_state.grouped_results[name][ik]["structure"] = df_filtered
+                                    else:
+                                        st.warning("No rows selected!")
+                                    st.rerun()
+
+                            with col2:
+                                if st.button("Keep only selected spectra", key=f"{name}_{ik}_keep"):
+                                    if selected:
+                                        df_filtered = df0.iloc[selected].reset_index(drop=True)
+                                        st.session_state.grouped_results[name][ik]["structure"] = df_filtered
+                                    else:
+                                        st.warning("No rows selected!")
+                                    st.rerun()
+
+                            # update the session state with the filtered dataframe
+                            st.session_state.grouped_results[name][ik]["structure"] = df0
+
         
     
     # selection menu for raw data search
