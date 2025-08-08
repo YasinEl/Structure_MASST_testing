@@ -372,7 +372,11 @@ def retrieve_raw_data_matches(
 
     redu_df = pd.DataFrame(all_rows)
 
+    columns_to_exclude = ['filename', 'TermsofPosition', 'ComorbidityListDOIDIndex', 'SampleCollectionDateandTime', 'ENVOBroadScale', 'ENVOLocalScale', 'ENVOMediumScale', 'qiita_sample_name',
+                          'UniqueSubjectID', 'UBERONOntologyIndex', 'DOIDOntologyIndex', 'ENVOEnvironmentBiomeIndex', 'ENVOEnvironmentMaterialIndex', 'ENVOLocalScaleIndex', 'ENVOBroadScaleIndex',
+                          'ENVOMediumScaleIndex', 'classification', 'MS2spectra_count']
 
+    redu_df = redu_df.drop(columns=columns_to_exclude, errors='ignore')
 
     # 1. Run FASST queries and collect non-empty responses
     responses = []
@@ -418,6 +422,9 @@ def retrieve_raw_data_matches(
             how='left'
         )
         redu_enriched.rename(columns={'Smiles': 'query_smiles'}, inplace=True)
+
+    # in every row add USI + :scan: + scan_id (as str)
+    redu_enriched["USI"] = redu_enriched["USI"] + ":scan:" + redu_enriched["scan_id"].astype(str)
 
     return raw_matches, redu_enriched
     

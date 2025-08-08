@@ -232,7 +232,18 @@ def get_masst_and_redu_tables(
         return masst_df, pd.DataFrame()
 
     print(f"[STEP 4] redu_table for {len(mids)} mri_id_ints")
-    redu_sql_tmpl = "SELECT * FROM redu_table WHERE mri_id_int IN ({ids})"
+
+    with sqlite3.connect(sqlite_path) as conn:
+        redu_columns = pd.read_sql("PRAGMA table_info(redu_table);", conn)
+    
+    redu_columns_list = redu_columns['name'].tolist()
+    columns_to_exclude = ['filename', 'TermsofPosition', 'ComorbidityListDOIDIndex', 'SampleCollectionDateandTime', 'ENVOBroadScale', 'ENVOLocalScale', 'ENVOMediumScale', 'qiita_sample_name',
+                          'UniqueSubjectID', 'UBERONOntologyIndex', 'DOIDOntologyIndex', 'ENVOEnvironmentBiomeIndex', 'ENVOEnvironmentMaterialIndex', 'ENVOLocalScaleIndex', 'ENVOBroadScaleIndex',
+                          'ENVOMediumScaleIndex', 'classification', 'MS2spectra_count']
+    redu_columns_list = [col for col in redu_columns_list if col not in columns_to_exclude]
+
+    redu_sql_tmpl = f"SELECT {', '.join(redu_columns_list)} FROM redu_table WHERE mri_id_int IN ({{ids}})"
+
     redu_df = _batched_fetch(redu_sql_tmpl, mids, fetch, chunk_size)
 
     return masst_df, redu_df
