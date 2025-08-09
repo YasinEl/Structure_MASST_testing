@@ -785,6 +785,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                         # redu matches tab
                         with sub_tabs[0]:
                             df_redu = st.session_state.raw_results[name]["redu"]
+
+
+
                             if 'mri_id_int' in df_redu.columns and len(df_redu) > 0:
 
                                 column_options = df_redu.columns.tolist()
@@ -851,6 +854,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                                 stages = [col1 + "_s", col2 + "_s", col3 + "_s", col4 + "_s"]
                                 df["color_key"] = df[stages[0]]
+
+                                # make sure all columns are string
+                                df[stages] = df[stages].astype(str)
 
                                 labels = []
                                 for i, stg in enumerate(stages, start=1):
