@@ -846,18 +846,21 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                 col3 = st.session_state[f"{name}_col3"]
                                 col4 = st.session_state[f"{name}_col4"]
 
-                                # build Sankey
+                                # 1) Collapse to top10 + "others" first (this also converts NaN → "others")
                                 df = df_redu.copy()
                                 for col in (col1, col2, col3, col4):
-                                    top10 = df[col].value_counts().nlargest(10).index
+                                    top10 = df[col].value_counts(dropna=True).nlargest(10).index
                                     df[col + "_s"] = df[col].where(df[col].isin(top10), "others")
 
                                 stages = [col1 + "_s", col2 + "_s", col3 + "_s", col4 + "_s"]
-                                df["color_key"] = df[stages[0]]
 
-                                # make sure all columns are string
+                                # 2) Now cast to str (after the collapse)
                                 df[stages] = df[stages].astype(str)
 
+                                # 3) Only now set color_key so its dtype matches the keys you'll build
+                                df["color_key"] = df[stages[0]]
+
+                                # 4) Build labels / idx as you had (these are strings now)
                                 labels = []
                                 for i, stg in enumerate(stages, start=1):
                                     uniques = df[stg].dropna().unique().tolist()
@@ -869,9 +872,16 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                     for u in df[stg].dropna().unique():
                                         idx[(stg, u)] = labels.index(f"{i}_{u}")
 
+                                # 5) Color map: tile palette to exact length (avoids version-dependent length)
+                                import math, plotly.express as px
                                 column_1_vals = df[stages[0]].unique().tolist()
-                                palette = px.colors.qualitative.Safe[:11]
-                                color_map = {cat: palette[i] for i, cat in enumerate(column_1_vals)}
+
+                                base = px.colors.qualitative.Safe
+                                palette = (base * math.ceil(len(column_1_vals) / len(base)))[:len(column_1_vals)]
+                                color_map = dict(zip(column_1_vals, palette))
+
+                                # Optional: pin "others" to a neutral gray
+                                color_map["others"] = "#B0B0B0"
 
                                 source, target, value, link_colors = [], [], [], []
                                 for i in range(len(stages) - 1):
