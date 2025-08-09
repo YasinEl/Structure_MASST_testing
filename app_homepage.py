@@ -7,7 +7,7 @@ from rdkit import Chem
 from PIL import Image
 import base64
 import io
-from bin.workflow_stepwise import retrieveSpectraCandidates, retrieve_raw_data_matches 
+from bin.workflow_stepwise import retrieve_raw_data_matches 
 from bin.run_masstRecords_queries import get_library_table, get_masst_and_redu_tables
 from bin.match_smiles import detect_smiles_or_smarts
 import matplotlib.pyplot as plt
