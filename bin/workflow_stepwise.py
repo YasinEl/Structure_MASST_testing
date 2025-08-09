@@ -422,7 +422,7 @@ def retrieve_raw_data_matches(
         redu_enriched.rename(columns={'Smiles': 'query_smiles'}, inplace=True)
 
     # in every row add USI + :scan: + scan_id (as str)
-    redu_enriched["USI"] = redu_enriched["USI"] + ":scan:" + redu_enriched["scan_id"].astype(str)
+    # redu_enriched["USI"] = redu_enriched["USI"] + ":scan:" + redu_enriched["scan_id"].astype(str)
 
     # make library usis for the links
     redu_enriched["lib_usi"] = redu_enriched["query_spectrum_id"].apply(

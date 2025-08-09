@@ -678,7 +678,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                         )
                     )                    
                     # in every row add USI + :scan: + scan_id (as str)
-                    redu_df["USI"] = redu_df["USI"] + ":scan:" + redu_df["scan_id"].astype(str)
+                    redu_df["USI"] = redu_df["mri"] + ":scan:" + redu_df["scan_id"].astype(str)
                     redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
 
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
