@@ -14,7 +14,7 @@ from rdkit import Chem
 from rdkit.Chem import inchi
 from io import StringIO
 import sqlite3
-
+from urllib.parse import quote_plus
 
 
 def get_masst_related_data(
@@ -410,8 +410,6 @@ def retrieve_raw_data_matches(
         return raw_matches, pd.DataFrame()
 
     redu_enriched = add_redu(raw_matches, redu_df, modification_condition=modification_condition)
-
-    print(library_subset.columns)
     
     # add Smiles column from library_subset to redu_enriched
     if 'Smiles' in library_subset.columns:
@@ -426,6 +424,36 @@ def retrieve_raw_data_matches(
     # in every row add USI + :scan: + scan_id (as str)
     redu_enriched["USI"] = redu_enriched["USI"] + ":scan:" + redu_enriched["scan_id"].astype(str)
 
+    # make library usis for the links
+    redu_enriched["lib_usi"] = redu_enriched["query_spectrum_id"].apply(
+        lambda x: (
+            f"mzspec:GNPS:GNPS-LIBRARY:accession:{x}" if x.startswith("CCMSLIB")
+            else f"mzspec:MASSBANK::accession:{x}" 
+        )
+    )
+
+    if 'Modified' in redu_enriched.columns:
+        def build_modifinder_link(row):
+            usi1 = quote_plus(f"{row['USI']}")
+            usi2 = quote_plus(row['lib_usi'])
+            return (
+                f"https://modifinder.gnps2.org/"
+                f"?USI1={usi2}"
+                f"&USI2={usi1}"
+                f"&SMILES1={quote_plus(row['query_smiles'])}"
+                f"&SMILES2&Helpers=&adduct={quote_plus(row['Adduct'])}"
+                "&ppm_tolerance=25&filter_peaks_variable=0.01"
+            )
+               
+
+        redu_enriched["modification_site"] = redu_enriched.apply(
+            lambda row: build_modifinder_link(row)
+            if (row["Modified"] != "no" and row["Adduct"] in 
+                ['[M+H]1+', '[M-H]1', '[M+Na]1+', '[M+NH4]1+', '[M+K]1+', '[M+Cl]1-', '[M+Br]1-'])
+            else '',
+            axis=1
+        )
+    
     return raw_matches, redu_enriched
     
 
@@ -496,6 +524,13 @@ def add_redu(
 
         valid_groups = merged[merged['Modified'] == 'no'][modification_condition].unique()
         merged = merged[merged[modification_condition].isin(valid_groups)]
+
+
+
+
+        # drop columns used for link generation
+        #merged = merged.drop(columns=["lib_usi"], errors="ignore")
+        # merged = merged.drop(columns=["query_smiles"], errors="ignore")
 
     return merged
 

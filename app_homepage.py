@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from streamlit.components.v1 import html
 import pandas as pd
@@ -15,10 +16,10 @@ from collections import defaultdict
 import plotly.graph_objects as go
 import plotly.express as px
 import plotly.colors as pc
-from urllib.parse import quote_plus
 from formula_validation.Formula import Formula
 import requests
 import re
+from urllib.parse import quote_plus
 
 try:
     from rdkit.Chem import Draw
@@ -34,6 +35,20 @@ spec = importlib.util.spec_from_file_location("config", config_path)
 config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)
 
+
+# build links for best spectral match and modification site
+def build_spectraresolver_link(row):
+    usi1 = quote_plus(f"{row['USI']}")
+    usi2 = quote_plus(row['lib_usi'])
+    return (
+        f"http://metabolomics-usi.gnps2.org/dashinterface"
+        f"?usi1={usi1}"
+        f"&usi2={usi2}"
+        f"&width=10.0&height=6.0&mz_min=None&mz_max=None"
+        f"&max_intensity=125&annotate_precision=4&annotation_rotation=90"
+        f"&cosine=standard&fragment_mz_tolerance=0.05"
+        f"&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D"
+    )
 
 # Add a tracking token
 html('<script async defer data-website-id="<your_website_id>" src="https://analytics.gnps2.org/umami.js"></script>', width=0, height=0)
@@ -655,7 +670,16 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                         how="left"
                         )
 
+                    # make library usis for the links
+                    redu_df["lib_usi"] = redu_df["query_spectrum_id"].apply(
+                        lambda x: (
+                            f"mzspec:GNPS:GNPS-LIBRARY:accession:{x}" if x.startswith("CCMSLIB")
+                            else f"mzspec:MASSBANK::accession:{x}" 
+                        )
+                    )                    
+                    # in every row add USI + :scan: + scan_id (as str)
                     redu_df["USI"] = redu_df["USI"] + ":scan:" + redu_df["scan_id"].astype(str)
+                    redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
 
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
             
@@ -696,7 +720,16 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     addition=do_addition if 'do_addition' in locals() else False,
                     modification_condition=modification_condition if 'modification_condition' in locals() else None,
                 )
-                
+
+                # make library usis for the links
+                redu_df["lib_usi"] = redu_df["query_spectrum_id"].apply(
+                    lambda x: (
+                        f"mzspec:GNPS:GNPS-LIBRARY:accession:{x}" if x.startswith("CCMSLIB")
+                        else f"mzspec:MASSBANK::accession:{x}" 
+                    )
+                )
+
+                redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
 
         # store the results in session state
@@ -752,8 +785,8 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                         # redu matches tab
                         with sub_tabs[0]:
                             df_redu = st.session_state.raw_results[name]["redu"]
-                            if 'mri_id_int' in df_redu.columns:
-                                
+                            if 'mri_id_int' in df_redu.columns and len(df_redu) > 0:
+
                                 column_options = df_redu.columns.tolist()
                                 # Make sankey diagram
                                 ##########
@@ -890,7 +923,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                                 st.plotly_chart(fig, use_container_width=True)
 
-                                # fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
+                                # if folder named output exists
+                                if os.path.exists("./output"):
+                                    fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
 
 
                                 raw_data_sankey_triggered = True
@@ -899,57 +934,8 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                 # sample matches tab
                                 #########
 
-                                # make library usis for the links
-                                df_redu["lib_usi"] = df_redu["query_spectrum_id"].apply(
-                                    lambda x: (
-                                        f"mzspec:GNPS:GNPS-LIBRARY:accession:{x}" if x.startswith("CCMSLIB")
-                                        else f"mzspec:MASSBANK::accession:{x}" if x.startswith("MSBNK")
-                                        else x
-                                    )
-                                )
-
-                                # build links for best spectral match and modification site
-                                def build_spectraresolver_link(row):
-                                    usi1 = quote_plus(f"{row['USI']}")
-                                    usi2 = quote_plus(row['lib_usi'])
-                                    return (
-                                        f"http://metabolomics-usi.gnps2.org/dashinterface"
-                                        f"?usi1={usi1}"
-                                        f"&usi2={usi2}"
-                                        f"&width=10.0&height=6.0&mz_min=None&mz_max=None"
-                                        f"&max_intensity=125&annotate_precision=4&annotation_rotation=90"
-                                        f"&cosine=standard&fragment_mz_tolerance=0.05"
-                                        f"&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D"
-                                    )
-
-                                def build_modifinder_link(row):
-                                    usi1 = quote_plus(f"{row['USI']}")
-                                    usi2 = quote_plus(row['lib_usi'])
-                                    return (
-                                        f"https://modifinder.gnps2.org/"
-                                        f"?USI1={usi2}"
-                                        f"&USI2={usi1}"
-                                        f"&SMILES1={quote_plus(row['query_smiles'])}"
-                                        f"&SMILES2&Helpers=&adduct={quote_plus(row['Adduct'])}"
-                                        "&ppm_tolerance=25&filter_peaks_variable=0.01"
-                                    )
-                                
-                            
-                                df_redu["best_spectral_match"] = df_redu.apply(build_spectraresolver_link, axis=1)
-
-                                if 'Modified' in df_redu.columns:
-                                    df_redu["modification_site"] = df_redu.apply(
-                                        lambda row: build_modifinder_link(row)
-                                        if (row["Modified"] != "no" and row["Adduct"] in 
-                                            ['[M+H]1+', '[M-H]1', '[M+Na]1+', '[M+NH4]1+', '[M+K]1+', '[M+Cl]1-', '[M+Br]1-'])
-                                        else '',
-                                        axis=1
-                                    )
 
 
-                                # drop columns used for link generation
-                                df_redu = df_redu.drop(columns=["lib_usi"], errors="ignore")
-                                df_redu = df_redu.drop(columns=["query_smiles"], errors="ignore")
 
                                 # Reorder columns: best_spectral_match first, then modification_site if it exists, then the rest
                                 cols = ["best_spectral_match"]
