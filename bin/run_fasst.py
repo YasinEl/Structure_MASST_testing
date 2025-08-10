@@ -47,6 +47,8 @@ def query_fasst_usi(status, usi, analog=False, precursor_mz_tol=0.05,
                 df.loc[df['Delta Mass'] > precursor_mz_tol, 'Modified'] = 'addition'
                 df.loc[df['Delta Mass'] < -precursor_mz_tol, 'Modified'] = 'elimination'
 
+                # if delta mass is below 1 set it to 0
+                df.loc[df['Delta Mass'].abs() < 1, 'Delta Mass'] = 0.0
 
                 if modimass_val is not None:
                     df = df[
