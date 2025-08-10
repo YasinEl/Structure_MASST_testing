@@ -651,7 +651,8 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                                             matching_peaks=int(min_peaks),
                                                             sqlite_path=config.PATH_TO_SQLITE,
                                                             api_endpoint=config.MASSTRECORDS_ENDPOINT,
-                                                            timeout=config.MASSTRECORDS_TIMEOUT)
+                                                            timeout=config.MASSTRECORDS_TIMEOUT,
+                                                            chunk_size=1)
 
                 # if cosine not in masst_df.columns return empty dataframes
                 if "cosine" not in masst_df.columns or "matching_peaks" not in masst_df.columns:
@@ -680,6 +681,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     # in every row add USI + :scan: + scan_id (as str)
                     redu_df["USI"] = redu_df["mri"] + ":scan:" + redu_df["scan_id"].astype(str)
                     redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
+                    print(f"..........Found {len(masst_df)} MASST hits and {len(redu_df)} ReDU matches for {name}..........")
 
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
             
@@ -719,17 +721,22 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     elimination=do_elimination if 'do_elimination' in locals() else False,
                     addition=do_addition if 'do_addition' in locals() else False,
                     modification_condition=modification_condition if 'modification_condition' in locals() else None,
+                    sqlite_path=config.PATH_TO_SQLITE,
+                    api_endpoint=config.MASSTRECORDS_ENDPOINT,
+                    timeout=config.MASSTRECORDS_TIMEOUT
                 )
+                
 
-                # make library usis for the links
-                redu_df["lib_usi"] = redu_df["query_spectrum_id"].apply(
-                    lambda x: (
-                        f"mzspec:GNPS:GNPS-LIBRARY:accession:{x}" if x.startswith("CCMSLIB")
-                        else f"mzspec:MASSBANK::accession:{x}" 
+                if len(redu_df) > 0:
+                    # make library usis for the links
+                    redu_df["lib_usi"] = redu_df["query_spectrum_id"].apply(
+                        lambda x: (
+                            f"mzspec:GNPS:GNPS-LIBRARY:accession:{x}" if x.startswith("CCMSLIB")
+                            else f"mzspec:MASSBANK::accession:{x}" 
+                        )
                     )
-                )
-
-                redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
+                    redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
+                    print(f"..........Found {len(masst_df)} MASST hits and {len(redu_df)} ReDU matches for {name}..........")
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
 
         # store the results in session state

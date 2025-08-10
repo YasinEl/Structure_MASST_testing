@@ -16,6 +16,8 @@ from io import StringIO
 import sqlite3
 from urllib.parse import quote_plus
 import sys
+from bin.run_masstRecords_queries import _get_fetcher
+
 
 HERE = os.path.dirname(__file__)  
 PKG_PATH = os.path.abspath(os.path.join(HERE, '..', 'external', 'GNPSDataPackage'))
@@ -48,7 +50,10 @@ def retrieve_raw_data_matches(
     fragment_mz_tol: float = 0.05,
     min_cos: float = 0.7,
     matching_peaks: int = 6,
-    cache: str = "Yes"
+    cache: str = "Yes",
+    sqlite_path: str | None = None,
+    api_endpoint: str = "http://127.0.0.1:8001/masst_records",
+    timeout: int = 10,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Query FASST for each spectrum in library_subset and optionally merge ReDU metadata.
@@ -71,45 +76,53 @@ def retrieve_raw_data_matches(
 
     # 0. load redu data
     print("Loading ReDU table...")
-    sql = """
-    SELECT * FROM redu_table
-    """
 
-    url = "https://masst-records.gnps2.org/masst_records_copy.json"
+    fetch = _get_fetcher(sqlite_path, api_endpoint, timeout)
 
-    params = {
-        "sql": sql,
-        "_shape": "objects",
-        "_size": 1000,  
-    }
+    # get the column names
+    redu_columns = fetch("SELECT name FROM pragma_table_info('redu_table')")
+    redu_columns_list = redu_columns["name"].tolist()
 
-    all_rows = []
-    while url:
-        print(f"Fetching: {url}")
-        r = requests.get(url, params=params)
-        r.raise_for_status()
-        data = r.json()
+    # exclude unwanted columns
+    columns_to_exclude = [
+        "filename","TermsofPosition","ComorbidityListDOIDIndex","SampleCollectionDateandTime",
+        "ENVOBroadScale","ENVOLocalScale","ENVOMediumScale","qiita_sample_name","UniqueSubjectID",
+        "UBERONOntologyIndex","DOIDOntologyIndex","ENVOEnvironmentBiomeIndex",
+        "ENVOEnvironmentMaterialIndex","ENVOLocalScaleIndex","ENVOBroadScaleIndex",
+        "ENVOMediumScaleIndex","classification","MS2spectra_count"
+    ]
+    cols = [c for c in redu_columns_list if c not in columns_to_exclude]
+    col_sql = ", ".join([f'"{c}"' for c in cols])
 
-        all_rows.extend(data["rows"])
-        next_url = data.get("next_url")
-        url = f"https://masst-records.gnps2.org{next_url}" if next_url else None
-        params = {}  
+    # count total rows
+    total_rows = int(fetch("SELECT COUNT(*) as n FROM redu_table")["n"].iloc[0])
 
-    redu_df = pd.DataFrame(all_rows)
+    # function to fetch one page
+    def fetch_page(offset, limit):
+        sql = f"SELECT {col_sql} FROM redu_table LIMIT {limit} OFFSET {offset}"
+        return fetch(sql)
 
-    columns_to_exclude = ['filename', 'TermsofPosition', 'ComorbidityListDOIDIndex', 'SampleCollectionDateandTime', 'ENVOBroadScale', 'ENVOLocalScale', 'ENVOMediumScale', 'qiita_sample_name',
-                          'UniqueSubjectID', 'UBERONOntologyIndex', 'DOIDOntologyIndex', 'ENVOEnvironmentBiomeIndex', 'ENVOEnvironmentMaterialIndex', 'ENVOLocalScaleIndex', 'ENVOBroadScaleIndex',
-                          'ENVOMediumScaleIndex', 'classification', 'MS2spectra_count']
+    # loop in batches
+    chunk_size = 50000  # adjust as needed
+    dfs = []
+    for offset in range(0, total_rows, chunk_size):
+        print(f"[PAGE] offset {offset} / {total_rows}")
+        df_chunk = fetch_page(offset, chunk_size)
+        dfs.append(df_chunk)
 
-    redu_df = redu_df.drop(columns=columns_to_exclude, errors='ignore')
+    # combine
+    redu_df = pd.concat(dfs, ignore_index=True)
+    print(f"Final total: {len(redu_df)} rows")
+
+    print("ReDU DataFrame loaded with shape:", redu_df.shape)
 
     # 1. Run FASST queries and collect non-empty responses
     status_results_list = []
     for spectrum_id in library_subset['query_spectrum_id']:
         usi_full = make_library_usi(spectrum_id)
         print("submitted", usi_full)
-        results = fasst.query_fasst_api_usi(usi_full, "metabolomicspanrepo_index_nightly", host=FASST_API_SERVER_URL, analog=analog, 
-                                            lower_delta=200, upper_delta=200, precursor_mz_tol=precursor_mz_tol, fragment_mz_tol=fragment_mz_tol, 
+        results = fasst.query_fasst_api_usi(usi_full, database, host=FASST_API_SERVER_URL, analog=analog, 
+                                            lower_delta=170, upper_delta=170, precursor_mz_tol=precursor_mz_tol, fragment_mz_tol=fragment_mz_tol, 
                                             min_cos=min_cos, cache=cache, blocking=False)
         
         status_results_list.append(results)
@@ -121,6 +134,7 @@ def retrieve_raw_data_matches(
         df = query_fasst_usi(
             status,
             spectrum_id,
+            precursor_mz_tol=precursor_mz_tol,
             analog=analog,
             matching_peaks=matching_peaks,
             modimass=modimass,
@@ -153,8 +167,6 @@ def retrieve_raw_data_matches(
         )
         redu_enriched.rename(columns={'Smiles': 'query_smiles'}, inplace=True)
 
-    # in every row add USI + :scan: + scan_id (as str)
-    # redu_enriched["USI"] = redu_enriched["USI"] + ":scan:" + redu_enriched["scan_id"].astype(str)
 
     # make library usis for the links
     redu_enriched["lib_usi"] = redu_enriched["query_spectrum_id"].apply(

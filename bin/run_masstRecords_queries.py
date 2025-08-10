@@ -22,14 +22,14 @@ def _fetch_csv(sql: str, api_endpoint: str, timeout: int) -> pd.DataFrame:
     print(f"[API ] Querying with SQL: {sql}")
     resp = requests.get(f"{api_endpoint}.csv", params={"sql": sql, "_stream": "on"}, timeout=timeout)
     resp.raise_for_status()
-    df = pd.read_csv(StringIO(resp.text))
+    df = pd.read_csv(StringIO(resp.text), dtype=str)
     print(f"[API ] returned {len(df)} rows")
     return df
 
 def _fetch_sqlite(sql: str, sqlite_path: str) -> pd.DataFrame:
     print(f"[SQL ] Querying with SQL: {sql}")
     with sqlite3.connect(sqlite_path) as conn:
-        df = pd.read_sql(sql, conn)
+        df = pd.read_sql(sql, conn, dtype=str)
     print(f"[SQL ] returned {len(df)} rows")
     return df
 
@@ -54,6 +54,7 @@ def _batched_fetch(template_sql: str,
         sql = template_sql.format(ids=",".join(map(str, chunk)))
         df = fetch(sql)
         if not df.empty:
+            print(f"[BATCH] chunk {i//chunk_size+1}: {len(chunk)} IDs returned {len(df)} rows")
             dfs.append(df)
     if dfs:
         result = pd.concat(dfs, ignore_index=True)
@@ -147,7 +148,7 @@ def get_library_table(
             "FROM library_table WHERE spectrum_id_int IN ({ids})"
         )
 
-        df_metadata = _batched_fetch(lib_sql_template, matched_ids, fetch, chunk_size=500)
+        df_metadata = _batched_fetch(lib_sql_template, matched_ids, fetch, chunk_size=100)
 
         # join and return
         df_final = library_df_minimal.merge(df_metadata, on='spectrum_id_int', how='left')
@@ -203,7 +204,7 @@ def get_masst_and_redu_tables(
         f"AND cosine >= {cosine_threshold} "
         f"AND matching_peaks >= {matching_peaks}"
     )
-    masst_df = _batched_fetch(masst_sql_tmpl, sids, fetch, chunk_size)
+    masst_df = _batched_fetch(masst_sql_tmpl, sids, fetch, chunk_size=chunk_size)
     if masst_df.empty:
         print("[STEP 2] no masst hits → exiting part 2")
         return pd.DataFrame(), pd.DataFrame()
@@ -213,7 +214,7 @@ def get_masst_and_redu_tables(
     if mids:
         print(f"[STEP 3a] fetching mri strings for {len(mids)} mri_id_ints")
         mri_sql   = "SELECT mri_id_int, mri FROM mri_table WHERE mri_id_int IN ({ids})"
-        mri_map   = _batched_fetch(mri_sql, mids, fetch, chunk_size)
+        mri_map   = _batched_fetch(mri_sql, mids, fetch, 500)
         if not mri_map.empty:
             masst_df = masst_df.merge(mri_map, on='mri_id_int', how='left')
         else:
@@ -224,6 +225,10 @@ def get_masst_and_redu_tables(
     # — add spectrum_id strings —
     print(f"[STEP 3b] merging spectrum_id for {len(sids)} spectrum_id_ints")
     spec_map = library_df[['spectrum_id_int', 'query_spectrum_id', 'Adduct', 'Compound_Name', 'inchikey_first_block']].drop_duplicates()
+    # make sure we match on same datatype
+    spec_map['spectrum_id_int'] = spec_map['spectrum_id_int'].astype('Int64')
+    masst_df['spectrum_id_int'] = masst_df['spectrum_id_int'].astype('Int64')
+
     masst_df = masst_df.merge(spec_map, on='spectrum_id_int', how='left')
 
     # — ReDU table —
@@ -245,6 +250,6 @@ def get_masst_and_redu_tables(
 
     redu_sql_tmpl = f"SELECT {', '.join(redu_columns_list)} FROM redu_table WHERE mri_id_int IN ({{ids}})"
 
-    redu_df = _batched_fetch(redu_sql_tmpl, mids, fetch, chunk_size)
+    redu_df = _batched_fetch(redu_sql_tmpl, mids, fetch, 500)
 
     return masst_df, redu_df
