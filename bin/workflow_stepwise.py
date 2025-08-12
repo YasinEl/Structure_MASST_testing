@@ -151,9 +151,6 @@ def retrieve_raw_data_matches(
     raw_matches = pd.concat(responses, ignore_index=True)
     raw_matches.rename(columns={'GNPSLibraryAccession': 'spectrum_id'}, inplace=True)
 
-    if 'Delta Mass' in raw_matches.columns:
-        raw_matches['Delta Mass'] = raw_matches['Delta Mass'].astype(float)
-        raw_matches['Delta Mass'] = raw_matches['Delta Mass'] * -1
 
     # 3. If ReDU data provided, merge and return enriched DataFrame
     if redu_df is None or redu_df.empty:

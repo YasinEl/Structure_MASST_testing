@@ -42,6 +42,8 @@ def query_fasst_usi(status, usi, analog=False, precursor_mz_tol=0.05,
                 print(f"Delta Mass filter applied: {precursor_mz_tol}")
 
             elif analog == True:
+                df['Delta Mass'] = df['Delta Mass'].astype(float)
+                df['Delta Mass'] = df['Delta Mass'] * -1
                 df = df[(df['Delta Mass'].abs() >= 5) | (df['Delta Mass'].abs() <= precursor_mz_tol)]
                 df.loc[df['Delta Mass'].abs() <= precursor_mz_tol, 'Modified'] = 'no'
                 df.loc[df['Delta Mass'] > precursor_mz_tol, 'Modified'] = 'addition'
