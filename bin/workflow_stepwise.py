@@ -103,7 +103,7 @@ def retrieve_raw_data_matches(
         return fetch(sql)
 
     # loop in batches
-    chunk_size = 50000  # adjust as needed
+    chunk_size = int(1E5)  # adjust as needed
     dfs = []
     for offset in range(0, total_rows, chunk_size):
         print(f"[PAGE] offset {offset} / {total_rows}")
@@ -161,7 +161,7 @@ def retrieve_raw_data_matches(
     # add Smiles column from library_subset to redu_enriched
     if 'Smiles' in library_subset.columns:
         redu_enriched = redu_enriched.merge(
-            library_subset[['query_spectrum_id', 'Smiles', 'Adduct', 'Compound_Name']],
+            library_subset[['query_spectrum_id', 'Smiles', 'Adduct', 'Compound_Name', 'Precursor_MZ']],
             left_on='query_spectrum_id',
             right_on='query_spectrum_id',
             how='left'
@@ -198,7 +198,30 @@ def retrieve_raw_data_matches(
             else '',
             axis=1
         )
+
+        def build_dashboard_link_modi(row):
+            usi = quote_plus(f"{row['USI']}")
+            mz_modi = str(float(row['Precursor_MZ']) + float(row['Delta Mass']))
+            mz_unmodi = str(f"{row['Precursor_MZ']}")
+            return (
+                f"https://dashboard.gnps2.org//"
+                f"?xic_mz={mz_modi}"
+                f"%3B"
+                f"{mz_unmodi}"
+                f"&xic_formula=&xic_peptide=&"
+                f"xic_tolerance={str(0.01)}"
+                f"&xic_ppm_tolerance=10"
+                f"&xic_tolerance_unit=Da&xic_rt_window=&xic_norm=False&xic_file_grouping=FILE&xic_integration_type=AUC&show_ms2_markers=True&ms2marker_color=blue&ms2marker_size=5&ms2_identifier=MS2%3A1939&show_lcms_2nd_map=False&map_plot_zoom=%7B%7D&polarity_filtering=None&polarity_filtering2=None&tic_option=TIC&overlay_usi=None&overlay_mz=None&overlay_rt=None&overlay_color=&overlay_size=&overlay_hover=&overlay_filter_column=&overlay_filter_value=&feature_finding_type=Off&feature_finding_ppm=10&feature_finding_noise=10000&feature_finding_min_peak_rt=0.05&feature_finding_max_peak_rt=1.5&feature_finding_rt_tolerance=0.3&massql_statement=QUERY+scaninfo%28MS2DATA%29&sychronization_session_id=4843dbcfa45a4411996350ee24062088&chromatogram_options=%5B%5D&comment=&map_plot_color_scale=Hot_r&map_plot_quantization_level=Medium&plot_theme=plotly_white#%7B%22usi%22%3A%20%22"
+                f"{usi}"
+                f"%22%2C%20%22usi2%22%3A%20%22%22%7D"
+            )
     
+    
+        redu_enriched["Check LC peak"] = redu_enriched.apply(
+            lambda row: build_dashboard_link_modi(row),
+            axis=1
+        )
+
     return raw_matches, redu_enriched
     
 

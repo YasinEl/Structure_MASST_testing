@@ -652,7 +652,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                                             sqlite_path=config.PATH_TO_SQLITE,
                                                             api_endpoint=config.MASSTRECORDS_ENDPOINT,
                                                             timeout=config.MASSTRECORDS_TIMEOUT,
-                                                            chunk_size=1)
+                                                            chunk_size=2)
 
                 # if cosine not in masst_df.columns return empty dataframes
                 if "cosine" not in masst_df.columns or "matching_peaks" not in masst_df.columns:
@@ -666,7 +666,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                 if 'mri_id_int' in redu_df.columns:
                     # add query spectrum ID and scan ID to redu_df //could potentially move this into get_masst_and_redu_tables
                     redu_df = redu_df.merge(
-                        df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct', 'Compound_Name', 'inchikey_first_block', 'mri']],
+                        df_masst_unique[["mri_id_int", "scan_id", "query_spectrum_id", 'Adduct', 'Compound_Name', 'Precursor_MZ', 'inchikey_first_block', 'mri']],
                         on="mri_id_int",
                         how="left"
                         )
@@ -681,7 +681,6 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     # in every row add USI + :scan: + scan_id (as str)
                     redu_df["USI"] = redu_df["mri"] + ":scan:" + redu_df["scan_id"].astype(str)
                     redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
-                    print(f"..........Found {len(masst_df)} MASST hits and {len(redu_df)} ReDU matches for {name}..........")
 
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
             
@@ -736,7 +735,6 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                         )
                     )
                     redu_df["best_spectral_match"] = redu_df.apply(build_spectraresolver_link, axis=1)
-                    print(f"..........Found {len(masst_df)} MASST hits and {len(redu_df)} ReDU matches for {name}..........")
                 new_results[name] = {"masst": masst_df, "redu": redu_df}
 
         # store the results in session state
@@ -964,6 +962,9 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                 cols = ["best_spectral_match"]
                                 if "modification_site" in df_redu.columns:
                                     cols.append("modification_site")
+                                if "Check LC peak" in df_redu.columns:
+                                    cols.append("Check LC peak")
+                                
                                 cols += [col for col in df_redu.columns if col not in cols]
                                 df_redu = df_redu[cols]
 
@@ -990,6 +991,11 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                     column_config["modification_site"] = st.column_config.LinkColumn(
                                         label="Modification Site",
                                         display_text="View Modification Site"
+                                    )
+                                if 'Check LC peak' in df_redu.columns:
+                                    column_config["Check LC peak"] = st.column_config.LinkColumn(
+                                        label="Check LC peak",
+                                        display_text="View LC peak"
                                     )
 
                                 # show dataframe

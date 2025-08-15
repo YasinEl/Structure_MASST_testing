@@ -29,7 +29,8 @@ def query_fasst_usi(status, usi, analog=False, precursor_mz_tol=0.05,
         modimass_val = None
 
     try:
-        response = fasst.blocking_for_results(status)
+        response = fasst.get_results(status, host="https://api.fasst.gnps2.org", blocking=True)
+        
 
         response_list = response['results']
 

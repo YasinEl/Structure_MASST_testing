@@ -143,7 +143,7 @@ def get_library_table(
         matched_ids = library_df_minimal['spectrum_id_int'].dropna().astype(int).unique().tolist()
 
         lib_sql_template = (
-            "SELECT spectrum_id_int, spectrum_id, Compound_Name, Ion_Mode, collision_energy, Adduct, "
+            "SELECT spectrum_id_int, spectrum_id, Compound_Name, Ion_Mode, collision_energy, Precursor_MZ, Adduct, "
             "msManufacturer, msMassAnalyzer, GNPS_library_membership "
             "FROM library_table WHERE spectrum_id_int IN ({ids})"
         )
@@ -224,7 +224,7 @@ def get_masst_and_redu_tables(
 
     # — add spectrum_id strings —
     print(f"[STEP 3b] merging spectrum_id for {len(sids)} spectrum_id_ints")
-    spec_map = library_df[['spectrum_id_int', 'query_spectrum_id', 'Adduct', 'Compound_Name', 'inchikey_first_block']].drop_duplicates()
+    spec_map = library_df[['spectrum_id_int', 'query_spectrum_id', 'Adduct', 'Compound_Name', 'Precursor_MZ', 'inchikey_first_block']].drop_duplicates()
     # make sure we match on same datatype
     spec_map['spectrum_id_int'] = spec_map['spectrum_id_int'].astype('Int64')
     masst_df['spectrum_id_int'] = masst_df['spectrum_id_int'].astype('Int64')
