@@ -10,6 +10,7 @@ import io
 from bin.workflow_stepwise import retrieve_raw_data_matches 
 from bin.run_masstRecords_queries import get_library_table, get_masst_and_redu_tables
 from bin.match_smiles import detect_smiles_or_smarts
+from bin.pubchem_handling  import pubchem_autocomplete, name_to_cid, cid_to_canonical_smiles
 import matplotlib.pyplot as plt
 import matplotlib
 from collections import defaultdict
@@ -63,14 +64,91 @@ st.set_page_config(
 st.title("StructureMASST")
 
 # — SMILES or CSV input —
-col1, col_or, col2 = st.columns([4,2,4])
-with col1:
-    smiles_input = st.text_input("SMILES/SMARTS", placeholder="Enter SMILES or SMARTS")
+col_name, col_or1, col_smiles, col_or2, col_csv = st.columns([4, 1, 4, 1, 4])
 
-with col_or:
+# ---------- state init ----------
+for k, v in [
+    ("name_query", ""),
+    ("last_fetched_query", None),
+    ("name_suggestions", []),
+    ("name_choice", None),
+    ("smiles_input", ""),
+    ("name_warning", None),
+]:
+    st.session_state.setdefault(k, v)
+
+def _resolve_name_to_smiles(selected_name: str):
+    """Resolve name → CID → Canonical SMILES, enforce single-component rule."""
+    st.session_state["name_warning"] = None  # reset
+    if not selected_name:
+        return
+    cid = name_to_cid(selected_name)
+    smiles = cid_to_canonical_smiles(cid) if cid else None
+
+    # Rule: must exist and must NOT contain '.'
+    if smiles and "." not in smiles:
+        st.session_state["smiles_input"] = smiles
+    else:
+        st.session_state["smiles_input"] = ""
+        st.session_state["name_warning"] = (
+            "PubChem entry does not represent a singular molecule "
+            "(no SMILES available or multi-component SMILES containing '.')."
+        )
+
+with col_name:
+    # Plain text_input (same style as SMILES). Pressing Enter triggers a rerun.
+    name_query = st.text_input(
+        "Type a chemical name",
+        key="name_query",
+        placeholder="e.g., aspirin, caffein",
+    )
+
+    # If the query changed (e.g., after Enter), fetch suggestions once
+    if name_query and name_query != st.session_state["last_fetched_query"]:
+        suggestions = pubchem_autocomplete(name_query) or []
+        st.session_state["name_suggestions"] = suggestions
+        st.session_state["last_fetched_query"] = name_query
+
+        # Preselect top suggestion and immediately try to populate SMILES
+        if suggestions:
+            st.session_state["name_choice"] = suggestions[0]
+            _resolve_name_to_smiles(suggestions[0])
+
+    # Show dropdown only when we have suggestions
+    suggestions = st.session_state["name_suggestions"]
+    if suggestions:
+        def _on_choice_change():
+            _resolve_name_to_smiles(st.session_state["name_choice"])
+
+        st.selectbox(
+            "Suggestions",
+            options=suggestions,
+            key="name_choice",
+            index=(
+                suggestions.index(st.session_state["name_choice"])
+                if st.session_state["name_choice"] in suggestions else 0
+            ),
+            on_change=_on_choice_change,
+        )
+
+    # Show warning (if any) right under the name controls
+    if st.session_state["name_warning"]:
+        st.warning(st.session_state["name_warning"])
+
+with col_or1:
     st.markdown("<div style='text-align:center; margin-top:2.5em;'>or</div>", unsafe_allow_html=True)
 
-with col2:
+with col_smiles:
+    smiles_input = st.text_input(
+        "SMILES/SMARTS",
+        key="smiles_input",  # gets auto-populated only if single-component
+        placeholder="Enter SMILES or SMARTS",
+    )
+
+with col_or2:
+    st.markdown("<div style='text-align:center; margin-top:2.5em;'>or</div>", unsafe_allow_html=True)
+
+with col_csv:
     uploaded_file = st.file_uploader("Drop CSV file for batch search", type=["csv"])
 
 # — Display molecule if valid SMILES/SMARTS —

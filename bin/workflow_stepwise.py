@@ -2,9 +2,7 @@ import pandas as pd
 from bin.match_smiles import fetch_and_match_smiles, detect_smiles_or_smarts
 from bin.match_smiles import detect_smiles_or_smarts
 from bin.run_fasst import query_fasst_usi
-# from match_smiles import fetch_and_match_smiles, detect_smiles_or_smarts
-# from run_fasst import query_fasst_usi
-# from make_linkouts import create_gnps_link
+from bin.run_masstRecords_queries import _get_fetcher
 import argparse
 from collections import defaultdict
 import os
@@ -16,7 +14,6 @@ from io import StringIO
 import sqlite3
 from urllib.parse import quote_plus
 import sys
-from bin.run_masstRecords_queries import _get_fetcher
 import time
 
 HERE = os.path.dirname(__file__)  
