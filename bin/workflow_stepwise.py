@@ -17,7 +17,7 @@ import sqlite3
 from urllib.parse import quote_plus
 import sys
 from bin.run_masstRecords_queries import _get_fetcher
-
+import time
 
 HERE = os.path.dirname(__file__)  
 PKG_PATH = os.path.abspath(os.path.join(HERE, '..', 'external', 'GNPSDataPackage'))
@@ -116,23 +116,50 @@ def retrieve_raw_data_matches(
 
     print("ReDU DataFrame loaded with shape:", redu_df.shape)
 
-    # 1. Run FASST queries and collect non-empty responses
-    status_results_list = []
+    TTL_SEC = 300  # 5 minutes
+
+    # 1) Submit all jobs and keep (status, spectrum_id, submitted_at) aligned
+    status_list, id_list, t_list = [], [], []
     for spectrum_id in library_subset['query_spectrum_id']:
         usi_full = make_library_usi(spectrum_id)
         print("submitted", usi_full)
-        results = fasst.query_fasst_api_usi(usi_full, database, host=FASST_API_SERVER_URL, analog=analog, 
-                                            lower_delta=170, upper_delta=170, precursor_mz_tol=precursor_mz_tol, fragment_mz_tol=fragment_mz_tol, 
-                                            min_cos=min_cos, cache=cache, blocking=False)
-        
-        status_results_list.append(results)
-        
-        
+        status = fasst.query_fasst_api_usi(
+            usi_full, database,
+            host=FASST_API_SERVER_URL,
+            analog=analog,
+            lower_delta=170, upper_delta=170,
+            precursor_mz_tol=precursor_mz_tol,
+            fragment_mz_tol=fragment_mz_tol,
+            min_cos=min_cos,
+            cache=cache,
+            blocking=False
+        )
+        status_list.append(status)
+        id_list.append(spectrum_id)
+        t_list.append(time.time())
+
+    # 2) For each job, if its token is older than TTL, re-submit, then poll
     responses = []
-    for status in status_results_list:
-        print(f"Checking status for {status}")
+    for status_token, spectrum_id, submitted_at in zip(status_list, id_list, t_list):
+        age = time.time() - submitted_at
+        if age >= TTL_SEC:
+            usi_full = make_library_usi(spectrum_id)
+            print("resubmitted", usi_full)
+            status_token = fasst.query_fasst_api_usi(
+                usi_full, database,
+                host=FASST_API_SERVER_URL,
+                analog=analog,
+                lower_delta=170, upper_delta=170,
+                precursor_mz_tol=precursor_mz_tol,
+                fragment_mz_tol=fragment_mz_tol,
+                min_cos=min_cos,
+                cache=cache,
+                blocking=False
+            )
+
+        print(f"Checking status for {status_token}")
         df = query_fasst_usi(
-            status,
+            status_token,
             spectrum_id,
             precursor_mz_tol=precursor_mz_tol,
             analog=analog,
