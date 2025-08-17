@@ -14,9 +14,15 @@ from rdkit import Chem
 from rdkit.Chem import inchi
 from io import StringIO
 import sqlite3
-
+import re
 
 # ——— Shared helpers ———
+def _append_limit_offset(sql: str, limit: int, offset: int) -> str:
+    base = sql.strip().rstrip(';')
+    return f"{base} LIMIT {int(limit)} OFFSET {int(offset)}"
+
+def _has_limit_or_offset(sql: str) -> bool:
+    return re.search(r'(?i)\b(LIMIT|OFFSET)\b', sql) is not None
 
 def _fetch_csv(sql: str, api_endpoint: str, timeout: int) -> pd.DataFrame:
     print(f"[API ] Querying with SQL: {sql}")
@@ -43,19 +49,65 @@ def _get_fetcher(sqlite_path: str, api_endpoint: str, timeout: int):
 def _batched_fetch(template_sql: str,
                    id_list: list[int],
                    fetch,
-                   chunk_size: int) -> pd.DataFrame:
+                   chunk_size: int,
+                   paginate: bool = False,
+                   page_size: int = 50000,
+                   max_pages: int | None = None) -> pd.DataFrame:
+    """
+    When paginate=True, each chunk is fetched in pages using LIMIT/OFFSET with `page_size`.
+    Pagination stops when a page returns < page_size rows (or max_pages is hit).
+    If the SQL already contains LIMIT/OFFSET, pagination is skipped for that chunk.
+    """
     if not id_list:
         print("[BATCH] No IDs to fetch.")
         return pd.DataFrame()
+
     dfs = []
     for i in range(0, len(id_list), chunk_size):
         chunk = id_list[i : i + chunk_size]
-        print(f"[BATCH] chunk {i//chunk_size+1}: {len(chunk)} IDs")
+        batch_idx = i // chunk_size + 1
+        print(f"[BATCH] chunk {batch_idx}: {len(chunk)} IDs")
+
         sql = template_sql.format(ids=",".join(map(str, chunk)))
-        df = fetch(sql)
-        if not df.empty:
-            print(f"[BATCH] chunk {i//chunk_size+1}: {len(chunk)} IDs returned {len(df)} rows")
-            dfs.append(df)
+
+        # If the user already specified LIMIT/OFFSET, do a single fetch.
+        if not paginate or _has_limit_or_offset(sql):
+            df = fetch(sql)
+            if not df.empty:
+                print(f"[BATCH] chunk {batch_idx}: {len(chunk)} IDs returned {len(df)} rows")
+                dfs.append(df)
+            continue
+
+        # Paginate with LIMIT/OFFSET
+        offset = 0
+        pages = 0
+        total_rows_this_chunk = 0
+        while True:
+            pages += 1
+            if (max_pages is not None) and (pages > max_pages):
+                print(f"[BATCH] chunk {batch_idx}: reached max_pages={max_pages}, stopping pagination")
+                break
+
+            paged_sql = _append_limit_offset(sql, page_size, offset)
+            df_page = fetch(paged_sql)
+
+            n_rows = len(df_page)
+            total_rows_this_chunk += n_rows
+            print(f"[BATCH] chunk {batch_idx} page {pages}: offset={offset} limit={page_size} -> {n_rows} rows")
+
+            if n_rows == 0:
+                break
+
+            dfs.append(df_page)
+
+            if n_rows < page_size:
+                # Last page for this chunk
+                break
+
+            offset += page_size
+
+        print(f"[BATCH] chunk {batch_idx}: total {total_rows_this_chunk} rows across {pages} page(s)")
+
     if dfs:
         result = pd.concat(dfs, ignore_index=True)
         print(f"[BATCH] total returned {len(result)} rows")
@@ -73,7 +125,7 @@ def get_library_table(
     tanimoto_threshold: float = 0.8,
     sqlite_path: str | None = None,
     api_endpoint: str = "http://127.0.0.1:8001/masst_records",
-    timeout: int = 10
+    timeout: int = 100
 ) -> pd.DataFrame:
     """
     Given a SMILES, returns the library_table for its InChIKey prefix.
@@ -199,12 +251,26 @@ def get_masst_and_redu_tables(
     if not sids:
         return pd.DataFrame(), pd.DataFrame()
     masst_sql_tmpl = (
-        "SELECT * FROM masst_table "
-        "WHERE spectrum_id_int IN ({ids}) "
-        f"AND cosine >= {cosine_threshold} "
-        f"AND matching_peaks >= {matching_peaks}"
+        "SELECT * FROM ("
+        "  SELECT *, "
+        "         ROW_NUMBER() OVER (PARTITION BY mri_id_int ORDER BY cosine DESC) AS rn "
+        "  FROM masst_table "
+        "  WHERE spectrum_id_int IN ({ids}) "
+        f"    AND cosine >= {cosine_threshold} "
+        f"    AND matching_peaks >= {matching_peaks}"
+        ") t "
+        "WHERE rn = 1"
     )
-    masst_df = _batched_fetch(masst_sql_tmpl, sids, fetch, chunk_size=chunk_size)
+
+    masst_df = _batched_fetch(
+        masst_sql_tmpl,
+        sids,
+        fetch,
+        chunk_size=chunk_size,
+        paginate=True,        # <-- enable pagination mode
+        page_size=500000,      # <-- set to your Datasette cap
+        max_pages=None        # <-- or set an upper bound if desired
+)
     if masst_df.empty:
         print("[STEP 2] no masst hits → exiting part 2")
         return pd.DataFrame(), pd.DataFrame()

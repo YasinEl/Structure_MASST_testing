@@ -730,7 +730,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                                                             sqlite_path=config.PATH_TO_SQLITE,
                                                             api_endpoint=config.MASSTRECORDS_ENDPOINT,
                                                             timeout=config.MASSTRECORDS_TIMEOUT,
-                                                            chunk_size=2)
+                                                            chunk_size=200)
 
                 # if cosine not in masst_df.columns return empty dataframes
                 if "cosine" not in masst_df.columns or "matching_peaks" not in masst_df.columns:
@@ -834,7 +834,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                 num_unique_mri = 0
 
             st.markdown(
-                f"##### Found **{len(df_pair['masst'])}** spectral hits and **{num_unique_mri}** unique matching samples with ReDU metadata for **{name}**."
+                f"##### Found **{num_unique_mri}** unique matching samples with ReDU metadata for **{name}**."
             )
 
         has_valid_results = any(
@@ -861,263 +861,254 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                             unsafe_allow_html=True
                         )
 
-                        # create two subtabs for this query structure
-                        sub_tabs = st.tabs(["Sample matches", "Spectral matches"])
 
                         
-                        # redu matches tab
-                        with sub_tabs[0]:
-                            df_redu = st.session_state.raw_results[name]["redu"]
+                        df_redu = st.session_state.raw_results[name]["redu"]
 
 
 
-                            if 'mri_id_int' in df_redu.columns and len(df_redu) > 0:
+                        if 'mri_id_int' in df_redu.columns and len(df_redu) > 0:
 
-                                column_options = df_redu.columns.tolist()
-                                # Make sankey diagram
-                                ##########
+                            column_options = df_redu.columns.tolist()
+                            # Make sankey diagram
+                            ##########
 
-                                # define defaults
-                                default_vals = [
-                                    "ATTRIBUTE_DatasetAccession",
-                                    "UBERONBodyPartName",
-                                    "NCBIDivision",
-                                    "NCBITaxonomy",
-                                ]
-                                def_val = lambda v: v if v in column_options else column_options[0]
+                            # define defaults
+                            default_vals = [
+                                "ATTRIBUTE_DatasetAccession",
+                                "UBERONBodyPartName",
+                                "NCBIDivision",
+                                "NCBITaxonomy",
+                            ]
+                            def_val = lambda v: v if v in column_options else column_options[0]
 
-                                # initialize session_state defaults 
-                                for i, default in enumerate(default_vals, start=1):
-                                    key = f"{name}_col{i}"
-                                    if key not in st.session_state:
-                                        st.session_state[key] = def_val(default)
+                            # initialize session_state defaults 
+                            for i, default in enumerate(default_vals, start=1):
+                                key = f"{name}_col{i}"
+                                if key not in st.session_state:
+                                    st.session_state[key] = def_val(default)
 
-                                # make four selectboxes 
-                                col1_c, col2_c, col3_c, col4_c = st.columns(4)
-                                with col1_c:
-                                    st.selectbox(
-                                        "Column 1",
-                                        column_options,
-                                        index=column_options.index(st.session_state[f"{name}_col1"]),
-                                        key=f"{name}_col1"
-                                    )
-                                with col2_c:
-                                    st.selectbox(
-                                        "Column 2",
-                                        column_options,
-                                        index=column_options.index(st.session_state[f"{name}_col2"]),
-                                        key=f"{name}_col2"
-                                    )
-                                with col3_c:
-                                    st.selectbox(
-                                        "Column 3",
-                                        column_options,
-                                        index=column_options.index(st.session_state[f"{name}_col3"]),
-                                        key=f"{name}_col3"
-                                    )
-                                with col4_c:
-                                    st.selectbox(
-                                        "Column 4",
-                                        column_options,
-                                        index=column_options.index(st.session_state[f"{name}_col4"]),
-                                        key=f"{name}_col4"
-                                    )
-
-                                # pull the latest values and build your Sankey immediately
-                                col1 = st.session_state[f"{name}_col1"]
-                                col2 = st.session_state[f"{name}_col2"]
-                                col3 = st.session_state[f"{name}_col3"]
-                                col4 = st.session_state[f"{name}_col4"]
-
-                                # 1) Collapse to top10 + "others" first (this also converts NaN → "others")
-                                df = df_redu.copy()
-                                for col in (col1, col2, col3, col4):
-                                    top10 = df[col].value_counts(dropna=True).nlargest(10).index
-                                    df[col + "_s"] = df[col].where(df[col].isin(top10), "others")
-
-                                stages = [col1 + "_s", col2 + "_s", col3 + "_s", col4 + "_s"]
-
-                                # 2) Now cast to str (after the collapse)
-                                df[stages] = df[stages].astype(str)
-
-                                # 3) Only now set color_key so its dtype matches the keys you'll build
-                                df["color_key"] = df[stages[0]]
-
-                                # 4) Build labels / idx as you had (these are strings now)
-                                labels = []
-                                for i, stg in enumerate(stages, start=1):
-                                    uniques = df[stg].dropna().unique().tolist()
-                                    labels += [f"{i}_{u}" for u in uniques]
-                                labels = list(dict.fromkeys(labels))
-
-                                idx = {}
-                                for i, stg in enumerate(stages, start=1):
-                                    for u in df[stg].dropna().unique():
-                                        idx[(stg, u)] = labels.index(f"{i}_{u}")
-
-                                # 5) Color map: tile palette to exact length (avoids version-dependent length)
-                                import math, plotly.express as px
-                                column_1_vals = df[stages[0]].unique().tolist()
-
-                                base = px.colors.qualitative.Safe
-                                palette = (base * math.ceil(len(column_1_vals) / len(base)))[:len(column_1_vals)]
-                                color_map = dict(zip(column_1_vals, palette))
-
-                                # Optional: pin "others" to a neutral gray
-                                color_map["others"] = "#B0B0B0"
-
-                                source, target, value, link_colors = [], [], [], []
-                                for i in range(len(stages) - 1):
-                                    grp = (
-                                        df
-                                        .dropna(subset=[stages[i], stages[i+1], "color_key"])
-                                        .groupby([stages[i], stages[i+1], "color_key"])
-                                        .size()
-                                        .reset_index(name="count")
-                                    )
-                                    for _, row in grp.iterrows():
-                                        src_val = row[stages[i]]
-                                        tgt_val = row[stages[i+1]]
-                                        color_key = row["color_key"]
-                                        source.append(idx[(stages[i], src_val)])
-                                        target.append(idx[(stages[i+1], tgt_val)])
-                                        value.append(row["count"])
-                                        link_colors.append(color_map.get(color_key, "rgba(0,0,0,0.3)"))
-
-                                fig = go.Figure(go.Sankey(
-                                    textfont=dict(family="Arial, sans-serif", size=12, color="black"),
-                                    arrangement="snap",
-                                    node=dict(
-                                        label=labels,
-                                        color=["#F2F2F2"] * len(labels),
-                                        pad=15,
-                                        thickness=20,
-                                        line=dict(color="black", width=0.5),
-                                    ),
-                                    link=dict(
-                                        source=source,
-                                        target=target,
-                                        value=value,
-                                        color=link_colors
-                                    ),
-                                ))
-
-                                # Add stage annotations
-                                stage_names = [col1, col2, col3, col4]
-                                n = len(stage_names) - 1
-                                for i, name_ in enumerate(stage_names):
-                                    x = i / n
-                                    xanchor = "left" if i == 0 else "right" if i == n else "center"
-                                    fig.add_annotation(
-                                        x=x, y=1.02, xref="paper", yref="paper",
-                                        text=name_, showarrow=False,
-                                        font=dict(size=14, color="black"),
-                                        xanchor=xanchor
-                                    )
-
-                                fig.update_layout(
-                                    font=dict(family="Arial, sans-serif", size=12),
-                                    margin=dict(l=60, r=60, t=120, b=20),
+                            # make four selectboxes 
+                            col1_c, col2_c, col3_c, col4_c = st.columns(4)
+                            with col1_c:
+                                st.selectbox(
+                                    "Column 1",
+                                    column_options,
+                                    index=column_options.index(st.session_state[f"{name}_col1"]),
+                                    key=f"{name}_col1"
+                                )
+                            with col2_c:
+                                st.selectbox(
+                                    "Column 2",
+                                    column_options,
+                                    index=column_options.index(st.session_state[f"{name}_col2"]),
+                                    key=f"{name}_col2"
+                                )
+                            with col3_c:
+                                st.selectbox(
+                                    "Column 3",
+                                    column_options,
+                                    index=column_options.index(st.session_state[f"{name}_col3"]),
+                                    key=f"{name}_col3"
+                                )
+                            with col4_c:
+                                st.selectbox(
+                                    "Column 4",
+                                    column_options,
+                                    index=column_options.index(st.session_state[f"{name}_col4"]),
+                                    key=f"{name}_col4"
                                 )
 
-                                st.plotly_chart(fig, use_container_width=True)
+                            # pull the latest values and build your Sankey immediately
+                            col1 = st.session_state[f"{name}_col1"]
+                            col2 = st.session_state[f"{name}_col2"]
+                            col3 = st.session_state[f"{name}_col3"]
+                            col4 = st.session_state[f"{name}_col4"]
 
-                                # if folder named output exists
-                                if os.path.exists("./output"):
-                                    fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
+                            # 1) Collapse to top10 + "others" first (this also converts NaN → "others")
+                            df = df_redu.copy()
+                            for col in (col1, col2, col3, col4):
+                                top10 = df[col].value_counts(dropna=True).nlargest(10).index
+                                df[col + "_s"] = df[col].where(df[col].isin(top10), "others")
 
+                            stages = [col1 + "_s", col2 + "_s", col3 + "_s", col4 + "_s"]
 
-                                raw_data_sankey_triggered = True
+                            # 2) Now cast to str (after the collapse)
+                            df[stages] = df[stages].astype(str)
 
+                            # 3) Only now set color_key so its dtype matches the keys you'll build
+                            df["color_key"] = df[stages[0]]
 
-                                # sample matches tab
-                                #########
+                            # 4) Build labels / idx as you had (these are strings now)
+                            labels = []
+                            for i, stg in enumerate(stages, start=1):
+                                uniques = df[stg].dropna().unique().tolist()
+                                labels += [f"{i}_{u}" for u in uniques]
+                            labels = list(dict.fromkeys(labels))
 
+                            idx = {}
+                            for i, stg in enumerate(stages, start=1):
+                                for u in df[stg].dropna().unique():
+                                    idx[(stg, u)] = labels.index(f"{i}_{u}")
 
+                            # 5) Color map: tile palette to exact length (avoids version-dependent length)
+                            import math, plotly.express as px
+                            column_1_vals = df[stages[0]].unique().tolist()
 
+                            base = px.colors.qualitative.Safe
+                            palette = (base * math.ceil(len(column_1_vals) / len(base)))[:len(column_1_vals)]
+                            color_map = dict(zip(column_1_vals, palette))
 
-                                # Reorder columns: best_spectral_match first, then modification_site if it exists, then the rest
-                                cols = ["best_spectral_match"]
-                                if "modification_site" in df_redu.columns:
-                                    cols.append("modification_site")
-                                if "Check LC peak" in df_redu.columns:
-                                    cols.append("Check LC peak")
-                                
-                                cols += [col for col in df_redu.columns if col not in cols]
-                                df_redu = df_redu[cols]
+                            # Optional: pin "others" to a neutral gray
+                            color_map["others"] = "#B0B0B0"
 
-                                # If modification column exists sort so that modified matches come first
-                                if 'Modified' in df_redu.columns:
-                                    df_redu['Modified'] = df_redu['Modified'].astype(str).str.lower()
-                                    df_redu.loc[~df_redu['Modified'].isin(['addition', 'elimination', 'no']), 'Modified'] = pd.NA
-                                    df_redu['Modified'] = pd.Categorical(
-                                        df_redu['Modified'],
-                                        categories=['addition', 'elimination', 'no'],
-                                        ordered=True
-                                    )
-                                    df_redu = df_redu.sort_values(by='Modified', ascending=True)
+                            source, target, value, link_colors = [], [], [], []
+                            for i in range(len(stages) - 1):
+                                grp = (
+                                    df
+                                    .dropna(subset=[stages[i], stages[i+1], "color_key"])
+                                    .groupby([stages[i], stages[i+1], "color_key"])
+                                    .size()
+                                    .reset_index(name="count")
+                                )
+                                for _, row in grp.iterrows():
+                                    src_val = row[stages[i]]
+                                    tgt_val = row[stages[i+1]]
+                                    color_key = row["color_key"]
+                                    source.append(idx[(stages[i], src_val)])
+                                    target.append(idx[(stages[i+1], tgt_val)])
+                                    value.append(row["count"])
+                                    link_colors.append(color_map.get(color_key, "rgba(0,0,0,0.3)"))
 
+                            fig = go.Figure(go.Sankey(
+                                textfont=dict(family="Arial, sans-serif", size=12, color="black"),
+                                arrangement="snap",
+                                node=dict(
+                                    label=labels,
+                                    color=["#F2F2F2"] * len(labels),
+                                    pad=15,
+                                    thickness=20,
+                                    line=dict(color="black", width=0.5),
+                                ),
+                                link=dict(
+                                    source=source,
+                                    target=target,
+                                    value=value,
+                                    color=link_colors
+                                ),
+                            ))
 
-                                column_config = {
-                                            "best_spectral_match": st.column_config.LinkColumn(
-                                                label="best_spectral_match",
-                                                display_text="View MS/MS match"
-                                            )
-                                        }
-                                
-                                if 'modification_site' in df_redu.columns:
-                                    column_config["modification_site"] = st.column_config.LinkColumn(
-                                        label="Modification Site",
-                                        display_text="View Modification Site"
-                                    )
-                                if 'Check LC peak' in df_redu.columns:
-                                    column_config["Check LC peak"] = st.column_config.LinkColumn(
-                                        label="Check LC peak",
-                                        display_text="View LC peak"
-                                    )
-
-                                # show dataframe
-                                table_evt = st.dataframe(
-                                    df_redu,
-                                    column_config=column_config,
-                                    hide_index=True,
-                                    use_container_width=True,
-                                    on_select="rerun",
-                                    selection_mode="multi-row",
-                                    key=f"{name}_redu_table",
+                            # Add stage annotations
+                            stage_names = [col1, col2, col3, col4]
+                            n = len(stage_names) - 1
+                            for i, name_ in enumerate(stage_names):
+                                x = i / n
+                                xanchor = "left" if i == 0 else "right" if i == n else "center"
+                                fig.add_annotation(
+                                    x=x, y=1.02, xref="paper", yref="paper",
+                                    text=name_, showarrow=False,
+                                    font=dict(size=14, color="black"),
+                                    xanchor=xanchor
                                 )
 
-                                # grab the selected row positions
-                                selected = table_evt.selection.rows
+                            fig.update_layout(
+                                font=dict(family="Arial, sans-serif", size=12),
+                                margin=dict(l=60, r=60, t=120, b=20),
+                            )
 
-                                # buttons for selected rows
-                                btn_col1, btn_col2, _ = st.columns([2,2,6])
-                                with btn_col1:
-                                    if st.button("Remove selected rows", key=f"{name}_redu_remove"):
-                                        if selected:
-                                            st.session_state.raw_results[name]["redu"] = (
-                                                df_redu.drop(df_redu.index[selected])
-                                            )
-                                        else:
-                                            st.warning("No rows selected!")
-                                        st.rerun()
-                                with btn_col2:
-                                    if st.button("Keep only selected rows", key=f"{name}_redu_keep"):
-                                        if selected:
-                                            st.session_state.raw_results[name]["redu"] = (
-                                                df_redu.iloc[selected].reset_index(drop=True)
-                                            )
-                                        else:
-                                            st.warning("No rows selected!")
-                                        st.rerun()
-                            else:
-                                st.warning("No ReDU metadata matches found.")
-                                                    
-                        # spectral matches tab
-                        with sub_tabs[1]:
-                            st.subheader(f"Spectral matches for {name}")
-                            df_masst = st.session_state.raw_results[name]["masst"]
-                            st.dataframe(df_masst, use_container_width=True)
+                            st.plotly_chart(fig, use_container_width=True)
+
+                            # if folder named output exists
+                            if os.path.exists("./output"):
+                                fig.write_image("./output/rawData_sankey.pdf", format="pdf", width=1240, height=400, scale=2)
+
+
+                            raw_data_sankey_triggered = True
+
+
+                            # sample matches tab
+                            #########
+
+
+
+
+                            # Reorder columns: best_spectral_match first, then modification_site if it exists, then the rest
+                            cols = ["best_spectral_match"]
+                            if "modification_site" in df_redu.columns:
+                                cols.append("modification_site")
+                            if "Check LC peak" in df_redu.columns:
+                                cols.append("Check LC peak")
+                            
+                            cols += [col for col in df_redu.columns if col not in cols]
+                            df_redu = df_redu[cols]
+
+                            # If modification column exists sort so that modified matches come first
+                            if 'Modified' in df_redu.columns:
+                                df_redu['Modified'] = df_redu['Modified'].astype(str).str.lower()
+                                df_redu.loc[~df_redu['Modified'].isin(['addition', 'elimination', 'no']), 'Modified'] = pd.NA
+                                df_redu['Modified'] = pd.Categorical(
+                                    df_redu['Modified'],
+                                    categories=['addition', 'elimination', 'no'],
+                                    ordered=True
+                                )
+                                df_redu = df_redu.sort_values(by='Modified', ascending=True)
+
+
+                            column_config = {
+                                        "best_spectral_match": st.column_config.LinkColumn(
+                                            label="best_spectral_match",
+                                            display_text="View MS/MS match"
+                                        )
+                                    }
+                            
+                            if 'modification_site' in df_redu.columns:
+                                column_config["modification_site"] = st.column_config.LinkColumn(
+                                    label="Modification Site",
+                                    display_text="View Modification Site"
+                                )
+                            if 'Check LC peak' in df_redu.columns:
+                                column_config["Check LC peak"] = st.column_config.LinkColumn(
+                                    label="Check LC peak",
+                                    display_text="View LC peak"
+                                )
+
+                            # show dataframe
+                            table_evt = st.dataframe(
+                                df_redu,
+                                column_config=column_config,
+                                hide_index=True,
+                                use_container_width=True,
+                                on_select="rerun",
+                                selection_mode="multi-row",
+                                key=f"{name}_redu_table",
+                            )
+
+                            # grab the selected row positions
+                            selected = table_evt.selection.rows
+
+                            # buttons for selected rows
+                            btn_col1, btn_col2, _ = st.columns([2,2,6])
+                            with btn_col1:
+                                if st.button("Remove selected rows", key=f"{name}_redu_remove"):
+                                    if selected:
+                                        st.session_state.raw_results[name]["redu"] = (
+                                            df_redu.drop(df_redu.index[selected])
+                                        )
+                                    else:
+                                        st.warning("No rows selected!")
+                                    st.rerun()
+                            with btn_col2:
+                                if st.button("Keep only selected rows", key=f"{name}_redu_keep"):
+                                    if selected:
+                                        st.session_state.raw_results[name]["redu"] = (
+                                            df_redu.iloc[selected].reset_index(drop=True)
+                                        )
+                                    else:
+                                        st.warning("No rows selected!")
+                                    st.rerun()
+                        else:
+                            st.warning("No ReDU metadata matches found.")
+
         
         else:
             st.warning("No raw data matches found. Please try a different query structure or adjust your search parameters.")
