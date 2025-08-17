@@ -98,7 +98,7 @@ def _resolve_name_to_smiles(selected_name: str):
 with col_name:
     # Plain text_input (same style as SMILES). Pressing Enter triggers a rerun.
     name_query = st.text_input(
-        "Type a chemical name",
+        "Type a chemical name to search PubChem",
         key="name_query",
         placeholder="e.g., aspirin, caffein",
     )
