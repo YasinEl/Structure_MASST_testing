@@ -175,16 +175,6 @@ def export_hits_map(
                 lataxis=dict(showgrid=show_graticules, gridcolor="rgba(0,0,0,0.15)", gridwidth=0.5),
                 lonaxis=dict(showgrid=show_graticules, gridcolor="rgba(0,0,0,0.15)", gridwidth=0.5),
             )
-        try:
-            fig.write_image(f"{out_basename}.png", scale=2)
-        except Exception as e:
-            if "kaleido" in str(e).lower():
-                raise RuntimeError("PNG export failed. Install kaleido: pip install -U kaleido") from e
-            else:
-                raise
-        if interactive:
-            fig.write_html(f"{out_basename}.html", include_plotlyjs="cdn",
-                           config={"scrollZoom": True})  # mouse wheel zoom
         return fig, df2
 
     df2["lat"] = lat.loc[valid].values
@@ -275,18 +265,5 @@ def export_hits_map(
                 ]
             )
 
-    # Export
-    # try:
-    #     fig.write_image(f"{out_basename}.png", scale=2)
-    # except Exception as e:
-    #     if "kaleido" in str(e).lower():
-    #         raise RuntimeError("PNG export failed. Install kaleido: pip install -U kaleido") from e
-    #     else:
-    #         raise
-
-    # if interactive:
-    #     # Enable mouse wheel zoom in the saved HTML
-    #     fig.write_html(f"{out_basename}.html", include_plotlyjs="cdn",
-    #                    config={"scrollZoom": True})
 
     return fig, hits
