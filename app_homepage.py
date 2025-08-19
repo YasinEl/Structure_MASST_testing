@@ -11,6 +11,7 @@ from bin.workflow_stepwise import retrieve_raw_data_matches
 from bin.run_masstRecords_queries import get_library_table, get_masst_and_redu_tables
 from bin.match_smiles import detect_smiles_or_smarts
 from bin.pubchem_handling  import pubchem_autocomplete, name_to_cid, cid_to_canonical_smiles
+from bin.plotting import raw_data_sankey, export_hits_map
 import matplotlib.pyplot as plt
 import matplotlib
 from collections import defaultdict
@@ -259,8 +260,6 @@ if st.button("Check Available Spectra"):
         except Exception as e:
             st.error(f"Error for {smi}: {e}")
 
-          
-
         # Setup for library conflicts. this is currently not doing anything
         print(f"Processing {name} with {len(df_library_structurematch)} matches")
         overview = []
@@ -296,9 +295,6 @@ if st.button("Check Available Spectra"):
             })
 
         st.session_state.molecule_overview[name] = pd.DataFrame(overview)
-
-
-
 
     # get results into session state
     st.session_state.grouped_results = grouped_results
@@ -448,8 +444,6 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     # update layout
                     st.plotly_chart(fig, use_container_width=True)
 
-
-
                 molecule_overview_df = st.session_state.molecule_overview[name]
 
                 if _RD_DRAW_AVAILABLE:
@@ -534,9 +528,6 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                 # update the session state with the filtered dataframe
                 st.session_state.molecule_overview[name] = molecule_overview_df
-                
-
-
 
                 # display each query structures available spectra as table
                 with st.expander("Molecules by InChIKey", expanded=True):
@@ -549,12 +540,13 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                             data = st.session_state.grouped_results[name][ik]
                             df0 = data["structure"].copy()
 
-                            # create spectrum link
-                            df0["spectrum_link"] = (
-                                "http://metabolomics-usi.gnps2.org/dashinterface?usi1=mzspec%3AGNPS%3AGNPS-LIBRARY%3Aaccession%3A"
-                                + df0["query_spectrum_id"].astype(str)
-                                + "&width=10.0&height=6.0&mz_min=None&mz_max=None&max_intensity=125&annotate_precision=4&annotation_rotation=90&cosine=standard&fragment_mz_tolerance=0.02&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D"
-                            )
+
+                            df0["spectrum_link"] = df0["query_spectrum_id"].apply(
+                                lambda x: (
+                                    f"http://metabolomics-usi.gnps2.org/dashinterface?usi1=mzspec%3AGNPS%3AGNPS-LIBRARY%3Aaccession%3A{x}&width=10.0&height=6.0&mz_min=None&mz_max=None&max_intensity=125&annotate_precision=4&annotation_rotation=90&cosine=standard&fragment_mz_tolerance=0.02&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D" if x.startswith("CCMSLIB")
+                                    else f"http://metabolomics-usi.gnps2.org/dashinterface?usi1=mzspec%3AMASSBANK%3A%3Aaccession%3A{x}&width=10.0&height=6.0&mz_min=None&mz_max=None&max_intensity=125&annotate_precision=4&annotation_rotation=90&cosine=standard&fragment_mz_tolerance=0.02&grid=True&annotate_peaks=%5B%5B%5D%2C%20%5B%5D%5D"
+                                )
+                            )  
 
                             # Make the spectrum column the first column
                             df0 = df0[["spectrum_link"] + [col for col in df0.columns if col != "spectrum_link"]]
@@ -852,7 +844,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                     with tab:
 
                         # get the results for this query structure
-                        st.markdown(f"##### Retrieved **{len(st.session_state.raw_results[name]['masst'])}** spectral hits for {name} with **{len(st.session_state.raw_results[name]['redu'])}** matching samples with ReDU metadata.")
+                        st.markdown(f"##### Retrieved **{len(st.session_state.raw_results[name]['redu'])}** matching samples with ReDU metadata for **{name}**.")
 
                         st.markdown(
                             "<div style='font-size:0.9em;'>"
@@ -925,98 +917,14 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                             col3 = st.session_state[f"{name}_col3"]
                             col4 = st.session_state[f"{name}_col4"]
 
-                            # 1) Collapse to top10 + "others" first (this also converts NaN → "others")
-                            df = df_redu.copy()
-                            for col in (col1, col2, col3, col4):
-                                top10 = df[col].value_counts(dropna=True).nlargest(10).index
-                                df[col + "_s"] = df[col].where(df[col].isin(top10), "others")
+                            fig = raw_data_sankey(df_redu, col1, col2, col3, col4)
 
-                            stages = [col1 + "_s", col2 + "_s", col3 + "_s", col4 + "_s"]
-
-                            # 2) Now cast to str (after the collapse)
-                            df[stages] = df[stages].astype(str)
-
-                            # 3) Only now set color_key so its dtype matches the keys you'll build
-                            df["color_key"] = df[stages[0]]
-
-                            # 4) Build labels / idx as you had (these are strings now)
-                            labels = []
-                            for i, stg in enumerate(stages, start=1):
-                                uniques = df[stg].dropna().unique().tolist()
-                                labels += [f"{i}_{u}" for u in uniques]
-                            labels = list(dict.fromkeys(labels))
-
-                            idx = {}
-                            for i, stg in enumerate(stages, start=1):
-                                for u in df[stg].dropna().unique():
-                                    idx[(stg, u)] = labels.index(f"{i}_{u}")
-
-                            # 5) Color map: tile palette to exact length (avoids version-dependent length)
-                            import math, plotly.express as px
-                            column_1_vals = df[stages[0]].unique().tolist()
-
-                            base = px.colors.qualitative.Safe
-                            palette = (base * math.ceil(len(column_1_vals) / len(base)))[:len(column_1_vals)]
-                            color_map = dict(zip(column_1_vals, palette))
-
-                            # Optional: pin "others" to a neutral gray
-                            color_map["others"] = "#B0B0B0"
-
-                            source, target, value, link_colors = [], [], [], []
-                            for i in range(len(stages) - 1):
-                                grp = (
-                                    df
-                                    .dropna(subset=[stages[i], stages[i+1], "color_key"])
-                                    .groupby([stages[i], stages[i+1], "color_key"])
-                                    .size()
-                                    .reset_index(name="count")
-                                )
-                                for _, row in grp.iterrows():
-                                    src_val = row[stages[i]]
-                                    tgt_val = row[stages[i+1]]
-                                    color_key = row["color_key"]
-                                    source.append(idx[(stages[i], src_val)])
-                                    target.append(idx[(stages[i+1], tgt_val)])
-                                    value.append(row["count"])
-                                    link_colors.append(color_map.get(color_key, "rgba(0,0,0,0.3)"))
-
-                            fig = go.Figure(go.Sankey(
-                                textfont=dict(family="Arial, sans-serif", size=12, color="black"),
-                                arrangement="snap",
-                                node=dict(
-                                    label=labels,
-                                    color=["#F2F2F2"] * len(labels),
-                                    pad=15,
-                                    thickness=20,
-                                    line=dict(color="black", width=0.5),
-                                ),
-                                link=dict(
-                                    source=source,
-                                    target=target,
-                                    value=value,
-                                    color=link_colors
-                                ),
-                            ))
-
-                            # Add stage annotations
-                            stage_names = [col1, col2, col3, col4]
-                            n = len(stage_names) - 1
-                            for i, name_ in enumerate(stage_names):
-                                x = i / n
-                                xanchor = "left" if i == 0 else "right" if i == n else "center"
-                                fig.add_annotation(
-                                    x=x, y=1.02, xref="paper", yref="paper",
-                                    text=name_, showarrow=False,
-                                    font=dict(size=14, color="black"),
-                                    xanchor=xanchor
-                                )
-
-                            fig.update_layout(
-                                font=dict(family="Arial, sans-serif", size=12),
-                                margin=dict(l=60, r=60, t=120, b=20),
-                            )
+                            fig_map, _ = export_hits_map(df_redu, engine="mapbox", hover_mri="count", map_style='carto-positron')
 
                             st.plotly_chart(fig, use_container_width=True)
+
+
+                            st.plotly_chart(fig_map, use_container_width=True, config={"scrollZoom": True})
 
                             # if folder named output exists
                             if os.path.exists("./output"):
