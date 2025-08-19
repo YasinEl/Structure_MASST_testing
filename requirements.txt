@@ -15,6 +15,7 @@ Pillow
 networkx
 psycopg2-binary
 formula_validation
+kaleido
 git+https://github.com/Wang-Bioinformatics-Lab/GNPSDataPackage.git
 dash_extensions
 rdkit
