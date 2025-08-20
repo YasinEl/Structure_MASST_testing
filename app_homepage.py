@@ -308,7 +308,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
     with st.expander("Available Library Entries", expanded=True):
         st.markdown("### Available Library Entries")
         name_tabs = st.tabs(list(st.session_state.grouped_results.keys()))
-        for name, name_tab in zip(st.session_state.grouped_results.keys(), name_tabs):
+        for fig_id, (name, name_tab) in enumerate(zip(st.session_state.grouped_results.keys(), name_tabs)):
             with name_tab:
 
                 tables = st.session_state.grouped_results[name]
@@ -442,7 +442,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
                             xanchor=xanchor
                         )
                     # update layout
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key=f"plot_{fig_id}")
 
                 molecule_overview_df = st.session_state.molecule_overview[name]
 
@@ -840,7 +840,7 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                 # create tabs for each query structure
                 result_tabs = st.tabs(list(st.session_state.raw_results.keys()))
-                for name, tab in zip(st.session_state.raw_results.keys(), result_tabs):
+                for result_fig_id, (name, tab) in enumerate(zip(st.session_state.raw_results.keys(), result_tabs)):
                     with tab:
 
                         # get the results for this query structure
@@ -921,10 +921,10 @@ if "grouped_results" in st.session_state and st.session_state["grouped_results"]
 
                             fig_map, _ = export_hits_map(df_redu, engine="mapbox", hover_mri="count", map_style='carto-positron')
 
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, use_container_width=True, key=f"sankey_{result_fig_id}")
 
 
-                            st.plotly_chart(fig_map, use_container_width=True, config={"scrollZoom": True})
+                            st.plotly_chart(fig_map, use_container_width=True, config={"scrollZoom": True}, key=f"map_{result_fig_id}")
 
                             # if folder named output exists
                             if os.path.exists("./output"):
